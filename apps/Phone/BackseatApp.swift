@@ -8,6 +8,8 @@ struct BackseatApp: App {
     init() {
         // 快捷操作（侧键、控制中心、锁屏卡片上的按钮）由系统在后台唤起 App 后调用到这里
         TalkBridge.handler = { action in await TalkController.shared.handle(action) }
+        // 把配对信息同步给手表
+        DeviceSync.shared.start()
     }
 
     var body: some Scene {

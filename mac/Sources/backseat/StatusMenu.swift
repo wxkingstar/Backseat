@@ -1,5 +1,6 @@
 import AppKit
 import ServiceManagement
+import SwiftUI
 
 /// 菜单栏图标：看配对码、本机地址、权限状态，设置登录时启动，退出。
 final class StatusMenu: NSObject, NSMenuDelegate {
@@ -11,8 +12,11 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         self.bridge = bridge
         self.port = port
         super.init()
-        item.button?.image = NSImage(systemSymbolName: "applewatch.radiowaves.left.and.right",
-                                     accessibilityDescription: "Backseat")
+        // 和手机、手表 App 图标同一个符号：</>
+        let image = NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: "Backseat")?
+            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
+        image?.isTemplate = true
+        item.button?.image = image
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
@@ -21,31 +25,46 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     /// 每次点开时重建，配对码和权限状态都是最新的
     func menuNeedsUpdate(_ menu: NSMenu) {
         menu.removeAllItems()
-        func info(_ title: String) { menu.addItem(withTitle: title, action: nil, keyEquivalent: "") }
-        func action(_ title: String, _ selector: Selector, on: Bool = false) {
+        func action(_ title: String, _ symbol: String, _ selector: Selector, on: Bool = false) {
             let i = menu.addItem(withTitle: title, action: selector, keyEquivalent: "")
             i.target = self
             i.state = on ? .on : .off
+            i.image = NSImage(systemSymbolName: symbol, accessibilityDescription: nil)
         }
 
-        info("Backseat 运行中 · 端口 \(port)")
-        let code = bridge.pairCode
-        info("配对码：\(code.prefix(3)) \(code.suffix(3))")
-        for host in Bridge.hosts { info("本机地址：\(host)") }
-        info("语音：\(MicStream.voiceIME == nil ? "Mac 内置识别" : MicStream.imeName)")
+        // 信息部分用自定义视图：系统菜单里没有动作的条目会被画成灰色，看起来像没生效
+        let trusted = Keyboard.isTrusted(prompt: false)
+        let header = NSHostingView(rootView: MenuHeader(
+            code: bridge.pairCode,
+            hosts: Bridge.hosts,
+            port: port,
+            voice: MicStream.voiceIME == nil ? "Mac 内置识别" : MicStream.imeName,
+            trusted: trusted))
+        header.frame = NSRect(origin: .zero, size: header.fittingSize)
+        let headerItem = NSMenuItem()
+        headerItem.view = header
+        menu.addItem(headerItem)
         menu.addItem(.separator())
-        if Keyboard.isTrusted(prompt: false) {
-            info("辅助功能权限：已授权")
-        } else {
-            action("辅助功能权限：未授权，点此打开设置…", #selector(openAccessibility))
-        }
+
+        action("拷贝配对码", "number", #selector(copyCode))
+        if !Bridge.hosts.isEmpty { action("拷贝本机地址", "doc.on.doc", #selector(copyHost)) }
+        if !trusted { action("打开辅助功能设置…", "hand.raised", #selector(openAccessibility)) }
         // 只有打包成 .app 运行时才能注册登录项
         if Bundle.main.bundleIdentifier != nil {
-            action("登录时启动", #selector(toggleLoginItem), on: SMAppService.mainApp.status == .enabled)
+            action("登录时启动", "power", #selector(toggleLoginItem), on: SMAppService.mainApp.status == .enabled)
         }
         menu.addItem(.separator())
-        action("退出", #selector(quit))
+        let quit = menu.addItem(withTitle: "退出 Backseat", action: #selector(quit), keyEquivalent: "q")
+        quit.target = self
     }
+
+    private func copy(_ text: String) {
+        NSPasteboard.general.clearContents()
+        NSPasteboard.general.setString(text, forType: .string)
+    }
+
+    @objc private func copyCode() { copy(bridge.pairCode) }
+    @objc private func copyHost() { if let h = Bridge.hosts.first { copy(h) } }
 
     @objc private func openAccessibility() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)
@@ -57,4 +76,60 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     }
 
     @objc private func quit() { NSApp.terminate(nil) }
+}
+
+/// 菜单顶部的状态卡：正常的文字颜色，配对码放大
+private struct MenuHeader: View {
+    let code: String
+    let hosts: [String]
+    let port: UInt16
+    let voice: String
+    let trusted: Bool
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 8) {
+                Image(systemName: "chevron.left.forwardslash.chevron.right")
+                    .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                    .frame(width: 24, height: 24)
+                    .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
+                        .fill(LinearGradient(colors: [Color(red: 1, green: 0.55, blue: 0.15), Color(red: 0.85, green: 0.25, blue: 0.35)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing)))
+                Text("Backseat").font(.system(size: 14, weight: .semibold))
+                Spacer()
+                Circle().fill(.green).frame(width: 7, height: 7)
+                Text("运行中").font(.system(size: 12)).foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 4) {
+                Text("配对码").font(.system(size: 11)).foregroundStyle(.secondary)
+                HStack(spacing: 6) {
+                    ForEach(Array(code.enumerated()), id: \.offset) { _, ch in
+                        Text(String(ch))
+                            .font(.system(size: 22, weight: .semibold, design: .rounded).monospacedDigit())
+                            .frame(width: 34, height: 40)
+                            .background(RoundedRectangle(cornerRadius: 8, style: .continuous).fill(.quaternary))
+                    }
+                }
+                Text("第一次使用时，在手机或手表的 Backseat 里输入").font(.system(size: 11)).foregroundStyle(.secondary)
+            }
+
+            VStack(alignment: .leading, spacing: 6) {
+                row("本机地址", hosts.isEmpty ? "没有网络" : hosts.joined(separator: "\n"))
+                row("端口", "\(port)")
+                row("语音识别", voice)
+                row("辅助功能", trusted ? "已授权" : "未授权，文字和按键无法输入", warn: !trusted)
+            }
+        }
+        .padding(.horizontal, 14).padding(.vertical, 12)
+        .frame(width: 280, alignment: .leading)
+    }
+
+    private func row(_ label: String, _ value: String, warn: Bool = false) -> some View {
+        HStack(alignment: .firstTextBaseline, spacing: 10) {
+            Text(label).font(.system(size: 12)).foregroundStyle(.secondary).frame(width: 56, alignment: .leading)
+            Text(value).font(.system(size: 12)).foregroundStyle(warn ? Color.orange : Color.primary)
+                .textSelection(.enabled).fixedSize(horizontal: false, vertical: true)
+        }
+    }
 }

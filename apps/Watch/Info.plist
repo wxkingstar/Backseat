@@ -39,7 +39,9 @@
 	<array>
 		<string>workout-processing</string>
 	</array>
-	<key>WKWatchOnly</key>
+	<key>WKCompanionAppBundleIdentifier</key>
+	<string>dev.backseat.$(DEVELOPMENT_TEAM).phone</string>
+	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
 </dict>
 </plist>

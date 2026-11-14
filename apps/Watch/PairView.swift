@@ -12,11 +12,16 @@ struct PairView: View {
         ScrollView {
             VStack(spacing: 8) {
                 Text("连接 Mac").font(.headline)
-                Text("Mac 上启动 backseat，按它显示的地址和配对码填写。")
+                Text("在 iPhone 的 Backseat 里配对好 Mac，这里会自动连上，不用输入。")
                     .font(.caption2).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                Button { DeviceSync.shared.requestFromPhone() } label: {
+                    Label("从 iPhone 获取", systemImage: "iphone.and.arrow.forward")
+                }
+                .tint(Theme.accent)
+                Text("或者手动填写").font(.caption2).foregroundStyle(.secondary).padding(.top, 6)
                 TextField("Mac 地址", text: $address)
                     .textInputAutocapitalization(.never).autocorrectionDisabled()
-                TextField("6 位配对码", text: $code)
+                TextField("4 位配对码", text: $code)
                 Button(busy ? "配对中…" : "配对") { pair() }
                     .disabled(busy || address.isEmpty || code.isEmpty)
                 if let error {
@@ -24,6 +29,13 @@ struct PairView: View {
                 }
             }
             .padding(.horizontal, 4)
+        }
+        // 一进来就先问一次手机
+        .task {
+            for _ in 0..<5 where !Pairing.shared.isPaired {
+                DeviceSync.shared.requestFromPhone()
+                try? await Task.sleep(for: .seconds(2))
+            }
         }
     }
 

@@ -5,6 +5,17 @@ struct BackseatWatchApp: App {
     @Environment(\.scenePhase) private var phase
     @State private var store = Store.shared
 
+    init() {
+        // 手机配对好 Mac 后把配对信息传过来，手表直接用
+        DeviceSync.shared.onAdopted = {
+            MainActor.assumeIsolated {
+                Pairing.shared.refresh()
+                Store.shared.refreshNow()
+            }
+        }
+        DeviceSync.shared.start()
+    }
+
     var body: some Scene {
         WindowGroup {
             RootView()

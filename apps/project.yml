@@ -17,7 +17,8 @@ targets:
     sources: [Watch, Shared]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.backseat.$(DEVELOPMENT_TEAM).watch
+        # 手表 App 是手机 App 的配套 App：Bundle ID 必须以手机 App 的为前缀，两边才能互传配对信息
+        PRODUCT_BUNDLE_IDENTIFIER: dev.backseat.$(DEVELOPMENT_TEAM).phone.watchkitapp
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -31,7 +32,9 @@ targets:
       properties:
         CFBundleDisplayName: Backseat
         WKApplication: true
-        WKWatchOnly: true
+        WKCompanionAppBundleIdentifier: dev.backseat.$(DEVELOPMENT_TEAM).phone
+        # 没有手机在身边也能单独用
+        WKRunsIndependentlyOfCompanionApp: true
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSMicrophoneUsageDescription: 按住说话时录音，交给你的 Mac 转成文字发给 Claude。
@@ -46,6 +49,8 @@ targets:
     sources: [Phone, Shared, PhoneShared]
     dependencies:
       - target: BackseatWidgets
+      # 手表 App 随手机 App 一起安装
+      - target: BackseatWatch
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: dev.backseat.$(DEVELOPMENT_TEAM).phone

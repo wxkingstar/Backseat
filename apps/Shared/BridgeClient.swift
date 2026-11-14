@@ -58,6 +58,25 @@ final class BridgeClient: @unchecked Sendable {
         activeHost = host
     }
 
+    /// 当前的配对信息，用来传给自己的另一台设备；没配对时为 nil
+    var pairingInfo: [String: Any]? {
+        let t = token
+        guard !t.isEmpty else { return nil }
+        return ["token": t, "hosts": UserDefaults.standard.stringArray(forKey: "pairedHosts") ?? [], "port": port]
+    }
+
+    /// 采用另一台设备传来的配对信息。和现在的一样、或内容不完整时返回 false
+    func adopt(_ info: [String: Any]) -> Bool {
+        guard let t = info["token"] as? String, !t.isEmpty, t != token,
+              let hosts = info["hosts"] as? [String], !hosts.isEmpty else { return false }
+        Keychain.set("token", t)
+        UserDefaults.standard.set(hosts, forKey: "pairedHosts")
+        UserDefaults.standard.set(info["port"] as? String ?? "8787", forKey: "pairedPort")
+        UserDefaults.standard.removeObject(forKey: "lastGoodHost")
+        lock.lock(); _token = t; _active = nil; lock.unlock()
+        return true
+    }
+
     func unpair() {
         Keychain.set("token", nil)
         for k in ["pairedHosts", "pairedPort", "lastGoodHost"] { UserDefaults.standard.removeObject(forKey: k) }

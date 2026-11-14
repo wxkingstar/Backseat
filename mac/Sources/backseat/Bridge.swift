@@ -38,7 +38,7 @@ final class Bridge: @unchecked Sendable {
     private var waiters: [(since: Int, responder: HTTPResponder)] = []
     private var remote = false
     private var lastWatchSeen = Date.distantPast
-    /// 配对码：手表 / 手机第一次连接时输入，换取 token。连错 5 次就换一个。
+    /// 配对码（4 位，只在局域网里用）：手表 / 手机第一次连接时输入，换取 token。连错 5 次就换一个。
     private(set) var pairCode = Bridge.newPairCode()
     private var pairFailures = 0
     private let port: UInt16
@@ -48,7 +48,7 @@ final class Bridge: @unchecked Sendable {
 
     init(token: String, port: UInt16) { self.token = token; self.port = port }
 
-    private static func newPairCode() -> String { String(format: "%06d", Int.random(in: 0..<1_000_000)) }
+    private static func newPairCode() -> String { String(format: "%04d", Int.random(in: 0..<10_000)) }
 
     /// 本机的 Bonjour 主机名（不带 .local）。ProcessInfo.hostName 有时返回的不是它，所以直接问系统配置
     static var localHostName: String? { SCDynamicStoreCopyLocalHostName(nil) as String? }

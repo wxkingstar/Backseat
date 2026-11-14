@@ -28,7 +28,7 @@ iPhone / Apple Watch ──局域网（配对后 token 鉴权）──► Mac �
 bash scripts/start.sh
 ```
 
-菜单栏会出现一个手表图标。第一次启动会自动完成配置：生成 token、把 Claude Code hooks 注册进 `~/.claude/settings.json`（原文件会先备份成 `settings.json.bak-backseat-*`）。
+菜单栏会出现一个 `</>` 图标。第一次启动会自动完成配置：生成 token、把 Claude Code hooks 注册进 `~/.claude/settings.json`（原文件会先备份成 `settings.json.bak-backseat-*`）。
 
 想要一个不依赖终端、可以登录时自动启动的 App：
 
@@ -50,10 +50,10 @@ bash scripts/setup.sh
 
 **3. 配对**
 
-第一次打开 App 会进入配对页。点 Mac 菜单栏的手表图标，能看到**配对码**和**本机地址**：
+第一次打开 App 会进入配对页。点 Mac 菜单栏的 `</>` 图标，能看到**配对码**和**本机地址**：
 
-- iPhone：同一局域网里的 Mac 会自动出现，选中后输入 6 位配对码。
-- Apple Watch：填 Mac 地址（IP 或 `xxx.local`）和 6 位配对码。
+- iPhone：同一局域网里的 Mac 会自动出现，选中后输入 4 位配对码。
+- Apple Watch：iPhone 配对好以后自动沿用，手表上不用输入。没有 iPhone 时也可以手动填 Mac 地址（IP 或 `xxx.local`）和 4 位配对码。
 
 配对一次即可，之后 Mac 的 IP 变了也能自动找回。要换一台 Mac，在 App 的设置里点「重新配对」。
 

@@ -35,7 +35,7 @@ final class Pairing {
 
     private(set) var isPaired = !BridgeClient.shared.token.isEmpty
 
-    /// address：Mac 的 IP 或主机名，可以带「:端口」。code：Mac 上显示的 6 位配对码。
+    /// address：Mac 的 IP 或主机名，可以带「:端口」。code：Mac 上显示的 4 位配对码。
     func pair(address: String, code: String) async throws {
         let parts = address.trimmingCharacters(in: .whitespaces).split(separator: ":")
         guard let host = parts.first.map(String.init) else { throw BridgeError.noHost }
@@ -43,6 +43,9 @@ final class Pairing {
                                            code: code.trimmingCharacters(in: .whitespaces))
         isPaired = true
     }
+
+    /// 配对信息是从另一台设备同步过来的（已经写进 BridgeClient），更新界面状态
+    func refresh() { isPaired = !BridgeClient.shared.token.isEmpty }
 
     func unpair() {
         BridgeClient.shared.unpair()
