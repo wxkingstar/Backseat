@@ -1,0 +1,8 @@
+apps/Config.local.xcconfig
+apps/build/
+# Xcode 工程由 XcodeGen 从 apps/project.yml 生成（里面会带上你的签名团队），不进仓库
+apps/*.xcodeproj/
+mac/.build/
+.DS_Store
+xcuserdata/
+/build/
