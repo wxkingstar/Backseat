@@ -122,17 +122,18 @@ bash scripts/setup.sh
 需要在输入法里确认两件事：
 
 - 麦克风选「自动检测 / 跟随系统」。
-- 语音输入用「长按」模式，快捷键是右 ⌘（豆包的默认设置）。
+- 语音输入用「长按」模式。
+- 长按的快捷键和 Backseat 里的一致。Backseat 默认按 **Fn**，和豆包的默认设置相同，一般不用改。如果你在豆包里换过键（比如外接键盘没有 Fn，改成了右 ⌘），点菜单栏的 Backseat 图标 →「语音快捷键」，选成同一个键。
 
 > 为什么要装一块虚拟声卡：macOS 可以不装驱动造一个虚拟麦克风，但系统不让它当默认麦克风，而且从它收音的程序自己要有「系统音频录制」权限。豆包输入法没有声明这个权限，读到的全是静音。所以需要一块真正的声卡。已经装了 [BlackHole](https://github.com/ExistentialAudio/BlackHole) 的话，没有 Backseat Mic 时会改用它。
 
 **换成别的语音输入法**（比如微信输入法；只实测过豆包）：在 `~/.backseat/config.json` 里加上输入源 ID 和它的长按快捷键，然后重启 Backseat。
 
 ```json
-{"token": "…", "port": 8787, "voiceIME": {"source": "输入源 ID", "holdKey": "rightCommand"}}
+{"token": "…", "port": 8787, "voiceIME": {"source": "输入源 ID", "holdKey": "fn"}}
 ```
 
-`holdKey` 可选 `rightCommand`、`rightOption`、`rightControl`、`rightShift`、`fn`。输入源 ID 用这条命令查：
+`holdKey` 可选 `fn`、`rightCommand`、`rightOption`、`rightControl`、`rightShift`，之后也可以在菜单栏的「语音快捷键」里改。输入源 ID 用这条命令查：
 
 ```bash
 defaults read com.apple.HIToolbox AppleEnabledInputSources
@@ -199,7 +200,7 @@ Backseat 只在局域网里工作，不经过任何服务器。人在外面想�
 ## 常见问题
 
 **说了话，Mac 上没有出字。**
-依次检查：输入法的麦克风是否选了「自动检测」；语音输入是否是「长按右 ⌘」；声卡列表里是否有「Backseat Mic」（系统设置 → 声音 → 输入）。还不行的话，退出菜单栏的 Backseat，从终端用 `bash scripts/start.sh` 启动：启动时会打印语音走的是哪种方式，每次说话也会打印收到多少声音、输入法有没有在收音。
+依次检查：输入法的麦克风是否选了「自动检测」；输入法里长按说话的键，和菜单栏 Backseat →「语音快捷键」里选的是否是同一个（默认都是 Fn）；声卡列表里是否有「Backseat Mic」（系统设置 → 声音 → 输入）。还不行的话，退出菜单栏的 Backseat，从终端用 `bash scripts/start.sh` 启动：启动时会打印语音走的是哪种方式，每次说话也会打印收到多少声音、输入法有没有在收音。
 
 **文字和按键输不进去，但提醒正常。**
 没有「辅助功能」权限。重新编译安装后系统有时会让旧授权失效：在辅助功能列表里把 Backseat 删掉再加回来。

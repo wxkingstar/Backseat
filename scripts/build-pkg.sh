@@ -41,5 +41,5 @@ PY
 SIGN=()
 if [ -n "${BACKSEAT_INSTALLER_ID:-}" ]; then SIGN=(--sign "$BACKSEAT_INSTALLER_ID"); fi
 pkgbuild --root "$STAGE/root" --component-plist "$STAGE/components.plist" --scripts "$STAGE/scripts" \
-  --identifier dev.backseat.pkg --version 1.0 --install-location / ${SIGN[@]+"${SIGN[@]}"} "$PKG" >/dev/null
+  --identifier dev.backseat.pkg --version 1.0.1 --install-location / ${SIGN[@]+"${SIGN[@]}"} "$PKG" >/dev/null
 echo "已生成 $PKG"

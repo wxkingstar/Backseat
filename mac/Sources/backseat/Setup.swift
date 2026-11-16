@@ -22,6 +22,14 @@ enum Setup {
 
     """#
 
+    /// 把菜单里选的语音快捷键写进 config.json（其他内容原样保留）
+    static func saveVoiceIME(source: String, holdKey: String) {
+        guard let data = try? Data(contentsOf: configURL),
+              var cfg = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+        cfg["voiceIME"] = ["source": source, "holdKey": holdKey]
+        try? JSONSerialization.data(withJSONObject: cfg).write(to: configURL)
+    }
+
     /// 读取配置；第一次运行时生成 token 并写入 ~/.backseat/config.json
     static func config() -> [String: Any] {
         if let data = try? Data(contentsOf: configURL),

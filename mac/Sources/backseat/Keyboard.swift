@@ -250,7 +250,7 @@ enum Keyboard {
         "fn": (63, .maskSecondaryFn, 0),
     ]
 
-    /// 按下 / 松开语音输入法的长按快捷键（豆包默认是右 ⌘）。只在主线程调用
+    /// 按下 / 松开语音输入法的长按快捷键（豆包默认是 Fn）。只在主线程调用
     static func hold(_ key: String, down: Bool) {
         guard let k = holdKeys[key] else { return }
         if down {

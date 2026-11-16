@@ -74,6 +74,20 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         action("拷贝配对码", "number", #selector(copyCode))
         if !Bridge.hosts.isEmpty { action("拷贝本机地址", "doc.on.doc", #selector(copyHost)) }
         if !trusted { action("打开辅助功能设置…", "hand.raised", #selector(openAccessibility)) }
+        // 语音快捷键要和语音输入法里设的「长按说话」一致，这里替你按住它
+        if let ime = MicStream.voiceIME {
+            let keys = NSMenu()
+            for (key, title) in Self.holdKeyTitles {
+                let i = keys.addItem(withTitle: title, action: #selector(pickHoldKey(_:)), keyEquivalent: "")
+                i.target = self
+                i.representedObject = key
+                i.state = key == ime.holdKey ? .on : .off
+            }
+            let current = Self.holdKeyTitles.first { $0.key == ime.holdKey }?.title ?? ime.holdKey
+            let parent = menu.addItem(withTitle: "语音快捷键：\(current)", action: nil, keyEquivalent: "")
+            parent.image = NSImage(systemSymbolName: "keyboard", accessibilityDescription: nil)
+            parent.submenu = keys
+        }
         // 只有打包成 .app 运行时才能注册登录项
         if Bundle.main.bundleIdentifier != nil {
             action("登录时启动", "power", #selector(toggleLoginItem), on: SMAppService.mainApp.status == .enabled)
@@ -90,6 +104,17 @@ final class StatusMenu: NSObject, NSMenuDelegate {
 
     @objc private func copyCode() { copy(bridge.pairCode) }
     @objc private func copyHost() { if let h = Bridge.hosts.first { copy(h) } }
+
+    /// 菜单里显示的顺序和名字；Fn 是豆包的默认设置
+    private static let holdKeyTitles: [(key: String, title: String)] = [
+        ("fn", "Fn"), ("rightCommand", "右 ⌘"), ("rightOption", "右 ⌥"), ("rightControl", "右 ⌃"), ("rightShift", "右 ⇧"),
+    ]
+
+    @objc private func pickHoldKey(_ sender: NSMenuItem) {
+        guard let key = sender.representedObject as? String, let ime = MicStream.voiceIME else { return }
+        MicStream.voiceIME = .init(sourceID: ime.sourceID, holdKey: key)
+        Setup.saveVoiceIME(source: ime.sourceID, holdKey: key)
+    }
 
     @objc private func openAccessibility() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)

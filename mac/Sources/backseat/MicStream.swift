@@ -3,7 +3,7 @@ import Carbon
 import Foundation
 
 /// 把手表当作 Mac 的麦克风：手表 / 手机实时推来的 PCM 播放进回环声卡（VirtualMic），
-/// 同时模拟长按语音快捷键触发语音输入法（默认豆包），输入法从虚拟麦克风收音、识别并上屏。
+/// 同时模拟长按语音快捷键触发语音输入法（默认豆包，长按 Fn），输入法从虚拟麦克风收音、识别并上屏。
 /// 没装语音输入法或虚拟麦克风创建失败时，退回 Mac 内置识别（整段转写后粘贴）。
 final class MicStream: @unchecked Sendable {
     static let sampleRate = 16_000.0
@@ -13,7 +13,7 @@ final class MicStream: @unchecked Sendable {
         let holdKey: String
     }
     /// 没有配置时自动识别的输入法
-    static let knownIMEs = [VoiceIME(sourceID: "com.bytedance.inputmethod.doubaoime.pinyin", holdKey: "rightCommand")]
+    static let knownIMEs = [VoiceIME(sourceID: "com.bytedance.inputmethod.doubaoime.pinyin", holdKey: "fn")]
     /// 实际使用的语音输入法：config.json 的 voiceIME 优先，否则取第一个已安装的
     static var voiceIME: VoiceIME? = knownIMEs.first { inputSource($0.sourceID) != nil }
 

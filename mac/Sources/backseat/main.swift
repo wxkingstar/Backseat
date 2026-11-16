@@ -14,9 +14,10 @@ if !Keyboard.isTrusted(prompt: true) {
     print("   没有这个权限，手表发来的文字和按键无法注入（审批、提醒不受影响）。")
 }
 
-// 可选：指定语音输入法，如 {"voiceIME": {"source": "<输入源 ID>", "holdKey": "rightCommand"}}
+// 可选：指定语音输入法和它的长按快捷键，如 {"voiceIME": {"source": "<输入源 ID>", "holdKey": "fn"}}
+// 快捷键也可以在菜单栏里改，改了会写回这里
 if let ime = cfg["voiceIME"] as? [String: String], let source = ime["source"] {
-    let key = ime["holdKey"] ?? "rightCommand"
+    let key = ime["holdKey"] ?? "fn"
     if MicStream.inputSource(source) == nil {
         print("⚠️  config.json 里的 voiceIME.source「\(source)」不是已启用的输入源，语音将使用 Mac 内置识别。")
     } else if Keyboard.holdKeys[key] == nil {
