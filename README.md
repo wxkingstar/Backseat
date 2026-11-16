@@ -56,26 +56,28 @@ iPhone / Apple Watch ──局域网──► Mac 上的 Backseat ──► 键�
 - Mac：macOS 26 或更新。
 - iPhone（iOS 18+）和 / 或 Apple Watch（watchOS 11+），和 Mac 在同一个局域网。
 - 想要边说边上屏：Mac 上装[豆包输入法](https://shurufa.doubao.com/)。不装也能用，会改用系统自带的识别（说完整段上屏）。
-- 目前没有上架 App Store，也没有现成的安装包：Mac 端、手机和手表 App 都需要自己用 Xcode 编译安装。
+- Mac 端有现成的安装包。手机和手表 App 正在 App Store 审核中，上架之前需要自己用 Xcode 编译安装。
 
 ## 安装
 
 **1. Mac 端**
 
-一条命令：下载源码、编译、安装、启动。
+下载 [Backseat.pkg](https://github.com/wxkingstar/Backseat/releases/latest/download/Backseat.pkg)，双击安装，然后在「应用程序」里打开 Backseat。安装包经过 Apple 公证，中途要输一次开机密码。
+
+想自己从源码编译的话，一条命令：下载源码、编译、安装、启动。
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/wxkingstar/Backseat/main/scripts/install.sh | bash
 ```
 
-中途要输一次开机密码。前提是装过 Xcode 命令行工具（没装的话脚本会提示 `xcode-select --install`）。以后升级，重新运行同一条命令即可。已经 clone 了仓库的话，运行 `bash scripts/install.sh` 效果一样。
+前提是装过 Xcode 命令行工具（没装的话脚本会提示 `xcode-select --install`）。以后升级，重新运行同一条命令即可。已经 clone 了仓库的话，运行 `bash scripts/install.sh` 效果一样。
 
 它装两样东西：
 
 - 菜单栏 App：`/Applications/Backseat.app`
 - 一块虚拟声卡「Backseat Mic」：语音输入法靠它听到手机 / 手表传来的声音（原理见下面「语音输入」）
 
-装完系统的音频服务会自动重启一次（声音断一两秒），不用重启电脑；Backseat 会自动打开，菜单栏出现它的图标（尖括号里一支麦克风）。
+装完系统的音频服务会自动重启一次（声音断一两秒），不用重启电脑。打开 Backseat 后（用命令安装的话会自动打开），菜单栏出现它的图标（尖括号里一支麦克风）。
 
 第一次启动会做三件事：
 
