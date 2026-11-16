@@ -16,7 +16,7 @@ iPhone / Apple Watch ──局域网（配对后 token 鉴权）──► Mac �
 
 ## 需要什么
 
-- Mac：macOS 26 或更新。不需要安装任何第三方软件或音频驱动。
+- Mac：macOS 26 或更新。
 - Apple Watch（watchOS 11+）和 / 或 iPhone（iOS 18+），和 Mac 在同一个局域网。
 - 目前手表和手机 App 需要自己用 Xcode 编译安装。
 
@@ -25,18 +25,21 @@ iPhone / Apple Watch ──局域网（配对后 token 鉴权）──► Mac �
 **1. Mac 端**
 
 ```bash
-bash scripts/start.sh
+bash scripts/build-pkg.sh
 ```
 
-菜单栏会出现一个 `</>` 图标。第一次启动会自动完成配置：生成 token、把 Claude Code hooks 注册进 `~/.claude/settings.json`（原文件会先备份成 `settings.json.bak-backseat-*`）。
+生成安装包 `build/Backseat.pkg`，双击安装（要输一次开机密码）。它装两样东西：
 
-想要一个不依赖终端、可以登录时自动启动的 App：
+- 菜单栏 App：`/Applications/Backseat.app`
+- 回环声卡「Backseat Mic」：`/Library/Audio/Plug-Ins/HAL/BackseatMic.driver`，语音输入法靠它听到手机 / 手表传来的声音（见下面「语音输入」）
+
+装完系统的音频服务会自动重启一次（声音断一两秒），不用重启电脑。然后打开「应用程序」里的 Backseat，菜单栏会出现它的图标（尖括号里一支麦克风）。第一次启动会自动完成配置：生成 token、把 Claude Code hooks 注册进 `~/.claude/settings.json`（原文件会先备份成 `settings.json.bak-backseat-*`）。
+
+开发时也可以不装 App，直接从终端启动（声卡仍然要靠安装包装上）：
 
 ```bash
-bash scripts/build-app.sh
+bash scripts/start.sh
 ```
-
-生成 `build/Backseat.app`，拖进「应用程序」后打开。
 
 第一次启动会弹「辅助功能」授权：系统设置 → 隐私与安全性 → 辅助功能，打开 Backseat（用 `start.sh` 启动时是运行它的终端 App）。没有这个权限，手表发出的文字和按键无法输入到 Mac，提醒和审批不受影响。如果系统防火墙询问是否允许接收连接，选**允许**。
 
@@ -50,7 +53,7 @@ bash scripts/setup.sh
 
 **3. 配对**
 
-第一次打开 App 会进入配对页。点 Mac 菜单栏的 `</>` 图标，能看到**配对码**和**本机地址**：
+第一次打开 App 会进入配对页。点 Mac 菜单栏的 Backseat 图标，能看到**配对码**和**本机地址**：
 
 - iPhone：同一局域网里的 Mac 会自动出现，选中后输入 4 位配对码。
 - Apple Watch：iPhone 配对好以后自动沿用，手表上不用输入。没有 iPhone 时也可以手动填 Mac 地址（IP 或 `xxx.local`）和 4 位配对码。
@@ -64,14 +67,18 @@ bash scripts/setup.sh
 | 方式 | 条件 | 效果 |
 |---|---|---|
 | **语音输入法**（推荐） | Mac 上装了豆包输入法 | 边说边上屏，识别质量由输入法决定 |
-| Mac 内置识别 | 什么都不用装 | 说完后整段转成文字粘贴，目前只识别中文 |
+| Mac 内置识别 | 没装豆包输入法，或没装回环声卡 | 说完后整段转成文字粘贴，目前只识别中文 |
 
-用语音输入法时，Backseat 会创建一个叫 **Backseat Mic** 的虚拟麦克风（用系统自带能力实现，不安装驱动），把收到的声音送进去，同时替你按住输入法的语音快捷键。说话期间系统默认输入设备会临时切到它，说完自动还原。
+用语音输入法时，声音经安装包带的回环声卡「Backseat Mic」送给输入法：说话期间 Backseat 把手机 / 手表传来的声音播给它，把系统默认麦克风临时切到它，同时替你按住输入法的语音快捷键；说完自动把默认麦克风还原。你坐在电脑前直接用语音输入时，输入法听的还是原来的麦克风。
 
 需要在输入法里确认两件事：
 
-- 麦克风选「跟随系统」或「Backseat Mic」。
+- 麦克风选「自动检测 / 跟随系统」。
 - 语音输入用「长按」模式，快捷键是右 ⌘（豆包的默认设置）。
+
+> 为什么要装驱动：macOS 可以不装驱动造一个虚拟麦克风（进程音频 tap），但系统不让它当默认麦克风，而且从它收音的程序自己要有「系统音频录制」权限。豆包输入法没有声明这个权限，读到的全是静音。所以需要一块真正的声卡。已经装了 [BlackHole](https://github.com/ExistentialAudio/BlackHole) 的话，没有 Backseat Mic 时会改用它。
+>
+> 卸载声卡：删掉 `/Library/Audio/Plug-Ins/HAL/BackseatMic.driver`，再执行 `sudo killall coreaudiod`。
 
 **换成别的语音输入法**（比如微信输入法；只实测过豆包）：在 `~/.backseat/config.json` 里加上输入源 ID 和它的长按快捷键，然后重启 Backseat。
 
@@ -95,15 +102,15 @@ defaults read com.apple.HIToolbox AppleEnabledInputSources
 |---|---|
 | 状态卡 | Claude 是在工作、完成了还是在等你回复；连不上 Mac 时这里会提示 |
 | 触控板 | 单指移动指针、轻点单击、双击、三击；按住半秒再移动（或轻点后马上按住）= 拖拽；双指滚动、捏合缩放、双指轻点右键；三指 / 四指轻扫在设置里选动作。右上角可以切到全屏触控板 |
-| 快捷短语 | 一点就发，在设置里增删改、隐藏、排序 |
-| 说话条 | 按住说话，松手后文字留在 Mac 输入框；上滑取消并删掉这一轮说的字。左边 ✕ 清空输入框，右边 ↑ 发送 |
-| 常用键 | 逗号、换行、⌘⏎、退格（在 Mac 光标处删）、更多按键。iPhone Duo 上它们在右侧状态栏下方 |
+| 快捷短语 | 一点就发。默认不显示，在设置里打开、增删改、排序 |
+| 说话条 | 按住说话，松手后文字留在 Mac 输入框；上滑取消并删掉这一轮说的字。有内容待处理时，左边出现 ✕ 清空输入框，右边出现 ↑ 发送 |
+| 常用键 | 逗号、换行、⌘⏎、退格（在 Mac 光标处删）、所有按键（点开是没摆出来的其余按键：回车、Esc、Tab、空格、方向键、句号、1/2/3）。iPhone Duo 上它们在右侧状态栏下方，放哪些、什么顺序可以在设置里调 |
 
 **不开 App 说话**：App 提供「开始 / 结束说话」快捷操作和「Backseat 说话」控制项，可以绑到手机侧键、控制中心、锁屏按钮，或在「辅助功能 → 触控 → 轻点背面」里绑到双击背面。录音时灵动岛显示状态，说完在锁屏卡片上点发送。
 
 **灵感收件箱**：连不上 Mac 时说的话会存在手机上，用系统自带识别转成文字；连上后在主屏的收件箱里发给 Claude。
 
-**设置**：目标应用（默认跟随 Mac 前台应用，也可以固定为某个应用）、鼠标灵敏度、三指 / 四指手势、快捷短语。
+**设置**：外观（跟随系统 / 浅色 / 深色）、快捷短语（默认都不显示）、右侧快捷键、目标应用（默认跟随 Mac 前台应用，也可以固定为某个应用）、鼠标灵敏度、三指 / 四指手势。
 
 ### Apple Watch
 
@@ -112,7 +119,7 @@ defaults read com.apple.HIToolbox AppleEnabledInputSources
 | 对讲 | 按住说话，松手后文字进 Mac 输入框；下方是清空、退格、发送 |
 | 快捷 | 逗号、⌘⏎、换行，以及常用短语 |
 | 滚轮 | 转表冠 = 滚动 Mac 上的内容 |
-| 按键 | Esc、Tab、1/2/3、方向键、回车 |
+| 按键 | 默认是 Esc、Tab、1/2/3、上下方向键、回车；放哪些在手表设置的「按键页」里选，其余的收在「所有按键」里 |
 
 **侧键**：手表「设置 → 操作按钮」，动作选「体能训练」，App 选 Backseat，按一下就打开并开始录音。
 
@@ -136,9 +143,9 @@ defaults read com.apple.HIToolbox AppleEnabledInputSources
 
 ## 文件
 
-- `mac/`：Mac 端（Swift，无第三方依赖）。HTTP 服务、状态与审批队列、键盘注入、虚拟麦克风、菜单栏。
+- `mac/`：Mac 端（Swift，无第三方依赖）。HTTP 服务、状态与审批队列、键盘注入、语音、菜单栏；`mac/Driver/` 是回环声卡驱动（C）。
 - `apps/`：watchOS 和 iOS App（XcodeGen 生成工程，`project.yml`）。
-- `scripts/`：`start.sh` 从终端启动，`build-app.sh` 打包菜单栏 App，`setup.sh` 写入 App 签名团队。
+- `scripts/`：`build-pkg.sh` 做安装包（内部调用 `build-app.sh` 和 `build-driver.sh`），`start.sh` 从终端启动，`setup.sh` 写入 App 签名团队。
 
 ## 许可
 

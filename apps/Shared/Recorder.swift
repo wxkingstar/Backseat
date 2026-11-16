@@ -38,19 +38,29 @@ final class Recorder {
     }
 
     /// 开始采集。onChunk 在后台线程回调 (seq, pcm)。
-    func start(onChunk: @escaping @Sendable (Int, Data) -> Void) throws {
+    /// background：由快捷操作在后台触发（手机侧键、控制中心）。
+    func start(background: Bool = false, onChunk: @escaping @Sendable (Int, Data) -> Void) throws {
         // 上一次的采集没收干净就先停掉，避免重复装 tap 触发系统断言崩溃
         if engine != nil || recording { _ = stop() }
         try pipe.prepare(onChunk: onChunk) { [weak self] lvl in
             Task { @MainActor in self?.level = lvl }
         }
         #if os(iOS)
-        // iPhone 用 AVCaptureSession 采集：部分 iPhone（如 iPhone Duo）上 AVAudioEngine 的输入
-        // 授权正常、不报错，但给的全是 0（Apple 论坛有多起同类报告，无官方修复）
-        // 启动麦克风要几十到上百毫秒，放到后台做，按下的瞬间界面先响应
-        recording = true
-        capQueue.async { [capture] in try? capture.start() }
-        formatNote = "AVCapture"
+        if background {
+            // App 在后台时 AVCaptureSession 拿不到麦克风（没有输入设备，录到的全是静音）。
+            // 后台录音要自己把音频会话激活成录音，再用 AVAudioEngine 采集
+            let session = AVAudioSession.sharedInstance()
+            try session.setCategory(.record, mode: .default)
+            try session.setActive(true)
+            try startEngine()
+        } else {
+            // 前台用 AVCaptureSession 采集：部分 iPhone（如 iPhone Duo）上 AVAudioEngine 的输入
+            // 授权正常、不报错，但给的全是 0（Apple 论坛有多起同类报告，无官方修复）
+            // 启动麦克风要几十到上百毫秒，放到后台线程做，按下的瞬间界面先响应
+            recording = true
+            capQueue.async { [capture] in try? capture.start() }
+            formatNote = "AVCapture"
+        }
         #else
         let session = AVAudioSession.sharedInstance()
         try session.setCategory(.record, mode: .default)

@@ -7,7 +7,8 @@ struct Phrase: Identifiable, Codable, Equatable {
     var text: String
     var enabled = true
 
-    static let defaults = ["继续", "提交代码并上线", "按你的方案做", "跑测试，失败就修"].map { Phrase(text: $0) }
+    /// 默认给几条现成的，但都不显示：主屏默认没有快捷短语，要用的自己到设置里打开
+    static let defaults = ["继续", "提交代码并上线", "按你的方案做", "跑测试，失败就修"].map { Phrase(text: $0, enabled: false) }
 
     static func load() -> [Phrase] {
         guard let data = UserDefaults.standard.data(forKey: "phrases"),
@@ -53,6 +54,17 @@ final class PhoneStore {
     var phrases: [Phrase] = Phrase.load() {
         didSet { Phrase.save(phrases) }
     }
+    /// iPhone Duo 右侧栏的快捷键，从上到下
+    var sideKeys: [SideKeyKind] = SideKeyKind.load("sideKeys", fallback: SideKeyKind.defaults) {
+        didSet { SideKeyKind.save(sideKeys, "sideKeys") }
+    }
+
+    /// 按下一个快捷键（「所有按键」由界面自己处理展开）
+    func run(_ k: SideKeyKind) {
+        if let t = k.text { insert(t) } else if let key = k.key { press(key) }
+    }
+    /// Mac 输入框里有没有手机这边说进去 / 打进去、还没发送的内容。有才显示清空和发送键
+    var hasDraft = false
     var visiblePhrases: [Phrase] {
         phrases.filter { $0.enabled && !$0.text.trimmingCharacters(in: .whitespaces).isEmpty }
     }
@@ -168,7 +180,7 @@ final class PhoneStore {
     /// 在 Mac 的光标处插入文字（逗号等），不回车
     func insert(_ text: String) {
         Task {
-            do { _ = try await client.sendPrompt(text, submit: false) }
+            do { _ = try await client.sendPrompt(text, submit: false); hasDraft = true }
             catch { fail(error) }
         }
     }
@@ -190,7 +202,7 @@ final class PhoneStore {
     func clearInput() {
         Haptics.warning()
         Task {
-            do { try await client.setInput("", submit: false); show("已清空") }
+            do { try await client.setInput("", submit: false); hasDraft = false; show("已清空") }
             catch { fail(error) }
         }
     }
@@ -199,6 +211,7 @@ final class PhoneStore {
     func sendInput() async -> Bool {
         do {
             try await client.press("enter")
+            hasDraft = false
             Haptics.success()
             return true
         } catch {

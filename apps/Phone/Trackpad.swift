@@ -20,12 +20,12 @@ struct TrackpadView: View {
         ZStack {
             RoundedRectangle(cornerRadius: 22, style: .continuous).fill(P.pad)
             DotGrid().clipShape(RoundedRectangle(cornerRadius: 22, style: .continuous))
-            RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(Color(white: 0.13))
+            RoundedRectangle(cornerRadius: 22, style: .continuous).stroke(P.padLine)
 
             VStack(spacing: 6) {
                 Image(systemName: "hand.point.up.left")
                     .font(.system(size: 30)).foregroundStyle(P.text3).padding(.bottom, 4)
-                Text("单指移动指针 · 轻点点击").font(.subheadline).foregroundStyle(Color(white: 0.79))
+                Text("单指移动指针 · 轻点点击").font(.subheadline).foregroundStyle(P.textSoft)
                 Text("双指滚动 / 捏合缩放 · 双指轻点右键")
                     .font(.footnote).foregroundStyle(P.text3)
                 Text("拖拽：按住半秒再移动，或轻点后马上按住拖动").font(.footnote).foregroundStyle(P.text3)
@@ -73,10 +73,10 @@ struct TrackpadView: View {
         .overlay(alignment: .topTrailing) {
             Button(action: onToggleFull) {
                 Image(systemName: fullScreen ? "arrow.down.right.and.arrow.up.left" : "arrow.up.left.and.arrow.down.right")
-                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(Color(white: 0.79))
+                    .font(.system(size: 14, weight: .semibold)).foregroundStyle(P.textSoft)
                     .frame(width: 44, height: 44)
             }
-            .buttonStyle(PressStyle(fill: Color(white: 0.11), radius: 22))
+            .buttonStyle(PressStyle(fill: P.card, radius: 22))
             .padding(6)
             .accessibilityLabel(fullScreen ? "退出全屏触控板" : "全屏触控板")
         }
@@ -125,7 +125,7 @@ struct DotGrid: View {
             while y < size.height {
                 var x: CGFloat = step / 2
                 while x < size.width {
-                    ctx.fill(Path(ellipseIn: CGRect(x: x - 1, y: y - 1, width: 2, height: 2)), with: .color(Color(white: 0.15)))
+                    ctx.fill(Path(ellipseIn: CGRect(x: x - 1, y: y - 1, width: 2, height: 2)), with: .color(P.padDot))
                     x += step
                 }
                 y += step

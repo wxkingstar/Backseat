@@ -27,6 +27,10 @@ struct SettingsView: View {
                 Text("只影响快捷页。说话的内容不会自动发送，在主页点 ↑ 才发出去。")
             }
 
+            Section {
+                NavigationLink("按键页") { KeysSettings() }
+            }
+
             Section("Mac 地址") {
                 ForEach(BridgeClient.shared.candidates, id: \.self) { h in
                     Text(h).font(.footnote).foregroundStyle(.secondary)

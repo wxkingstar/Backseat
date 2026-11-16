@@ -2,7 +2,7 @@ import AVFoundation
 import Carbon
 import Foundation
 
-/// 把手表当作 Mac 的麦克风：手表实时推来的 PCM 播放进自带的虚拟麦克风（VirtualMic），
+/// 把手表当作 Mac 的麦克风：手表 / 手机实时推来的 PCM 播放进回环声卡（VirtualMic），
 /// 同时模拟长按语音快捷键触发语音输入法（默认豆包），输入法从虚拟麦克风收音、识别并上屏。
 /// 没装语音输入法或虚拟麦克风创建失败时，退回 Mac 内置识别（整段转写后粘贴）。
 final class MicStream: @unchecked Sendable {
@@ -59,6 +59,14 @@ final class MicStream: @unchecked Sendable {
         return Unmanaged<CFString>.fromOpaque(p).takeUnretainedValue() as String
     }
 
+    /// 启动时记一行日志：语音走哪条路
+    var setupNote: String {
+        guard Self.voiceIME.flatMap({ Self.inputSource($0.sourceID) }) != nil else { return "语音：Mac 内置识别（没有装语音输入法）" }
+        return virtualMic.deviceID != nil
+            ? "语音：\(Self.imeName)，声音经「\(virtualMic.deviceName)」送给它"
+            : "语音：Mac 内置识别。系统里没有 Backseat Mic 声卡，\(Self.imeName)听不到手机的声音；用安装包安装 Backseat 会一并装上"
+    }
+
     var preferredEngine: Engine {
         virtualMic.deviceID != nil && Self.voiceIME.flatMap({ Self.inputSource($0.sourceID) }) != nil ? .ime : .apple
     }
@@ -76,14 +84,22 @@ final class MicStream: @unchecked Sendable {
             collected = Data()
             scheduledFrames = 0
             mode = preferredEngine
-            guard mode == .ime, let ime = Self.voiceIME else { return mode }
+            guard mode == .ime, let ime = Self.voiceIME, let loopback = virtualMic.deviceID else { return mode }
 
-            // 播到默认输出即可：虚拟麦克风会截住本进程的声音，扬声器不出声
+            // 先把系统默认麦克风切过去，再建播放引擎。顺序不能反：
+            // 默认设备一变，系统会让已经在跑的引擎重新配置，把它的输出设备重置回扬声器，声音就播不进回环声卡了
+            virtualMic.takeOverInput()
+            // 后面任何一步失败都要把默认麦克风还回去
+            var started = false
+            defer { if !started { virtualMic.releaseInput() } }
             let e = AVAudioEngine()
+            // 把声音播给回环声卡，它的输入端就是输入法听到的麦克风
+            try e.outputNode.auAudioUnit.setDeviceID(loopback)
             let p = AVAudioPlayerNode()
             e.attach(p)
             e.connect(p, to: e.mainMixerNode, format: format)
             try e.start()
+            started = true
             p.play()
             engine = e
             player = p
@@ -94,7 +110,6 @@ final class MicStream: @unchecked Sendable {
                 focusNote = Focus.ensureInput()
                 // 记下开说前输入框里的内容，取消时据此删掉这一轮说进去的字
                 baseline = Focus.focusedText()
-                virtualMic.takeOverInput()
                 Self.activateIME(ime, saving: &previousSource)
                 Keyboard.hold(ime.holdKey, down: true)
             }
@@ -140,6 +155,12 @@ final class MicStream: @unchecked Sendable {
             if statChunks == 0 { note += "（没收到任何音频）" } else if peakDb < -45 { note += "（几乎是静音）" }
             return note
         }
+        let blocked = await MainActor.run { Keyboard.blockedReleases }
+        if blocked > 0 { audioNote += "，拦下 \(blocked) 次外部对快捷键的松开" }
+        // 这时快捷键还按着，输入法如果在用虚拟麦克风，设备应该正被占用
+        if mode == .ime, !virtualMic.isInUse {
+            audioNote += "；输入法没有从 \(virtualMic.deviceName) 收音，请把输入法的麦克风设成「自动检测 / 跟随系统」"
+        }
         let (m, pcm, remaining) = queue.sync { () -> (Engine, Data, Double) in
             let played = player?.lastRenderTime.flatMap { player?.playerTime(forNodeTime: $0)?.sampleTime } ?? 0
             let remain = Double(max(0, scheduledFrames - played)) / Self.sampleRate
@@ -163,7 +184,8 @@ final class MicStream: @unchecked Sendable {
                     guard let before = baseline, let after = Focus.focusedText() else {
                         return "读不到输入框内容，未删除"
                     }
-                    let n = after.count - before.count
+                    // 有的输入框（Claude）空的时候读出来是一个换行符，不能算成原有的字
+                    let n = after.count - (before == "\n" ? 0 : before.count)
                     guard n > 0 else { return "这一轮没有输入文字" }
                     for _ in 0..<n { _ = Keyboard.press("backspace") }
                     return "已删除这一轮的 \(n) 个字"

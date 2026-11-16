@@ -1,17 +1,14 @@
 import CoreAudio
 import Foundation
 
-/// 自带的虚拟麦克风，不需要安装任何音频驱动。
-/// 用系统的进程音频 tap 截住本进程播放的声音（截住后不再从扬声器出声），
-/// 再包成一个所有 App 可见的输入设备「Backseat Mic」，语音输入法从它收音。
+/// 回环声卡：往它的输出端播声音，它的输入端原样送出来，语音输入法把它当麦克风收音。
+/// 用随 Backseat 一起安装的「Backseat Mic」驱动（源码在 mac/Driver）；没装的话，系统里有 BlackHole 也能用。
+/// 说话期间把它设成系统默认麦克风，说完还原，所以输入法的麦克风保持「自动检测 / 跟随系统」就行。
+///
+/// 为什么非要装驱动：系统也可以不装驱动造一个虚拟麦克风（进程音频 tap），以前的版本就是这么做的。
+/// 但它不能当默认麦克风，而且从它收音的程序自己要有「系统音频录制」权限，
+/// 没声明这项权限的程序（豆包输入法就是）读到的全是静音，所以行不通。
 final class VirtualMic {
-    static let name = "Backseat Mic"
-    static let uid = "dev.backseat.mic"
-
-    private var tapID = AudioObjectID(kAudioObjectUnknown)
-    private(set) var deviceID: AudioDeviceID?
-    private var savedInput: AudioDeviceID?
-
     private static let system = AudioObjectID(kAudioObjectSystemObject)
 
     private static func address(_ selector: AudioObjectPropertySelector) -> AudioObjectPropertyAddress {
@@ -19,65 +16,64 @@ final class VirtualMic {
                                    mElement: kAudioObjectPropertyElementMain)
     }
 
-    /// 删掉系统里已有的「Backseat Mic」。进程异常退出时设备会残留，启动和退出时都清一次。
-    static func removeDevice() {
-        var addr = address(kAudioHardwarePropertyTranslateUIDToDevice)
-        var uid = Self.uid as CFString
-        var device = AudioDeviceID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioDeviceID>.size)
-        guard AudioObjectGetPropertyData(system, &addr, UInt32(MemoryLayout<CFString>.size), &uid,
-                                         &size, &device) == noErr,
-              device != kAudioObjectUnknown else { return }
-        AudioHardwareDestroyAggregateDevice(device)
+    private static func string(_ object: AudioObjectID, _ selector: AudioObjectPropertySelector) -> String {
+        var addr = address(selector)
+        var value: CFString = "" as CFString
+        var size = UInt32(MemoryLayout<CFString>.size)
+        return AudioObjectGetPropertyData(object, &addr, 0, nil, &size, &value) == noErr ? value as String : ""
     }
 
-    /// 创建虚拟麦克风。失败时 deviceID 为 nil，调用方退回内置识别。
-    init() {
-        Self.removeDevice()
-        var pid = getpid()
-        var addr = Self.address(kAudioHardwarePropertyTranslatePIDToProcessObject)
-        var process = AudioObjectID(kAudioObjectUnknown)
-        var size = UInt32(MemoryLayout<AudioObjectID>.size)
-        guard AudioObjectGetPropertyData(Self.system, &addr, UInt32(MemoryLayout<pid_t>.size), &pid,
-                                         &size, &process) == noErr,
-              process != kAudioObjectUnknown else { return }
+    private static func objects(_ selector: AudioObjectPropertySelector) -> [AudioObjectID] {
+        var addr = address(selector)
+        var size: UInt32 = 0
+        guard AudioObjectGetPropertyDataSize(system, &addr, 0, nil, &size) == noErr, size > 0 else { return [] }
+        var list = [AudioObjectID](repeating: 0, count: Int(size) / MemoryLayout<AudioObjectID>.size)
+        guard AudioObjectGetPropertyData(system, &addr, 0, nil, &size, &list) == noErr else { return [] }
+        return list
+    }
 
-        let tap = CATapDescription(stereoMixdownOfProcesses: [process])
-        tap.uuid = UUID()
-        tap.name = Self.name
-        tap.muteBehavior = .muted
-        tap.isPrivate = false
-        guard AudioHardwareCreateProcessTap(tap, &tapID) == noErr else { return }
-
-        let desc: [String: Any] = [
-            kAudioAggregateDeviceNameKey: Self.name,
-            kAudioAggregateDeviceUIDKey: Self.uid,
-            kAudioAggregateDeviceIsPrivateKey: false,
-            kAudioAggregateDeviceIsStackedKey: false,
-            kAudioAggregateDeviceTapAutoStartKey: true,
-            kAudioAggregateDeviceTapListKey: [[kAudioSubTapUIDKey: tap.uuid.uuidString,
-                                               kAudioSubTapDriftCompensationKey: true]],
-        ]
-        var device = AudioObjectID(kAudioObjectUnknown)
-        guard AudioHardwareCreateAggregateDevice(desc as CFDictionary, &device) == noErr else {
-            AudioHardwareDestroyProcessTap(tapID)
-            return
+    /// 清掉免驱动时代留下的东西：聚合设备和进程音频 tap（当时的进程被直接结束时它们不会自己消失）
+    static func removeLegacy() {
+        for device in objects(kAudioHardwarePropertyDevices) where string(device, kAudioDevicePropertyDeviceUID) == "dev.backseat.mic" {
+            AudioHardwareDestroyAggregateDevice(device)
         }
-        deviceID = device
+        for tap in objects(kAudioHardwarePropertyTapList)
+        where ["Backseat Mic", "VibeWatch Mic"].contains(string(tap, kAudioObjectPropertyName)) {
+            AudioHardwareDestroyProcessTap(tap)
+        }
     }
 
-    /// 说话期间把系统默认输入切到虚拟麦克风，这样输入法的麦克风选「跟随系统」就能用。
-    func takeOverInput() {
-        guard let deviceID, savedInput == nil else { return }
+    /// 回环声卡；系统里没有就是 nil，这时退回 Mac 内置识别
+    let deviceID: AudioDeviceID?
+    /// 它叫什么（记日志用）
+    let deviceName: String
+    private var savedInput: AudioDeviceID?
+
+    init() {
+        Self.removeLegacy()
+        let uids = Self.objects(kAudioHardwarePropertyDevices).map { ($0, Self.string($0, kAudioDevicePropertyDeviceUID)) }
+        // 自己的驱动优先，其次是 BlackHole
+        let found = uids.first { $0.1 == "BackseatMic_UID" } ?? uids.first { $0.1.hasPrefix("BlackHole") }
+        deviceID = found?.0
+        deviceName = found.map { Self.string($0.0, kAudioObjectPropertyName) } ?? ""
+    }
+
+    /// 说话期间把系统默认输入切到回环声卡。返回切成了没有
+    @discardableResult
+    func takeOverInput() -> Bool {
+        guard let deviceID else { return false }
         var addr = Self.address(kAudioHardwarePropertyDefaultInputDevice)
         var current = AudioDeviceID(kAudioObjectUnknown)
         var size = UInt32(MemoryLayout<AudioDeviceID>.size)
         AudioObjectGetPropertyData(Self.system, &addr, 0, nil, &size, &current)
-        guard current != deviceID else { return }
+        guard current != deviceID else { return true }
         var target = deviceID
-        if AudioObjectSetPropertyData(Self.system, &addr, 0, nil, size, &target) == noErr {
-            savedInput = current
-        }
+        guard AudioObjectSetPropertyData(Self.system, &addr, 0, nil, size, &target) == noErr else { return false }
+        var now = AudioDeviceID(kAudioObjectUnknown)
+        AudioObjectGetPropertyData(Self.system, &addr, 0, nil, &size, &now)
+        guard now == deviceID else { return false }
+        if savedInput == nil { savedInput = current }
+        return true
     }
 
     /// 说完后把系统默认输入还原
@@ -86,5 +82,15 @@ final class VirtualMic {
         savedInput = nil
         var addr = Self.address(kAudioHardwarePropertyDefaultInputDevice)
         AudioObjectSetPropertyData(Self.system, &addr, 0, nil, UInt32(MemoryLayout<AudioDeviceID>.size), &previous)
+    }
+
+    /// 有没有程序正在从回环声卡收音（输入法开麦后为 true）
+    var isInUse: Bool {
+        guard let deviceID else { return false }
+        var addr = Self.address(kAudioDevicePropertyDeviceIsRunningSomewhere)
+        var value: UInt32 = 0
+        var size = UInt32(MemoryLayout<UInt32>.size)
+        AudioObjectGetPropertyData(deviceID, &addr, 0, nil, &size, &value)
+        return value != 0
     }
 }

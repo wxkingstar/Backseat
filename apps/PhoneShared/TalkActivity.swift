@@ -24,7 +24,10 @@ enum TalkBridge {
 
 /// 开始 / 结束说话。录音类意图：系统允许它在后台直接开麦克风，不需要打开 App。
 /// 手机侧键、控制中心、锁屏按钮、双击背面（经快捷指令）都调用它。
-struct ToggleTalkIntent: AudioRecordingIntent {
+/// 同时声明成实时活动类意图：这个文件 App 和小组件扩展都编译了，只声明录音类时，
+/// 控制中心的按钮会在小组件扩展的进程里执行它，那边没有挂实现，点了就没反应；
+/// 实时活动类意图系统一定交给主 App 进程执行。
+struct ToggleTalkIntent: AudioRecordingIntent, LiveActivityIntent {
     static var title: LocalizedStringResource = "开始 / 结束说话"
     static var description = IntentDescription("按一下开始说话，再按一下结束，文字进入 Mac 的输入框。")
     static var openAppWhenRun = false

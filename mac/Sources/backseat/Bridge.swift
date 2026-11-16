@@ -31,6 +31,7 @@ final class Bridge: @unchecked Sendable {
     private let queue = DispatchQueue(label: "backseat.state")
     private let token: String
     private let mic = MicStream()
+    var voiceNote: String { mic.setupNote }
     private var seq = 0
     private var events: [Event] = []
     private var approvals: [Approval] = []

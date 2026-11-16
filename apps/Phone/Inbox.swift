@@ -122,7 +122,7 @@ struct InboxBanner: View {
         Button(action: action) {
             HStack(spacing: 8) {
                 Image(systemName: "tray.full.fill").foregroundStyle(P.accent)
-                Text("灵感收件箱 \(Inbox.shared.items.count) 条").font(.subheadline.weight(.semibold)).foregroundStyle(.white)
+                Text("灵感收件箱 \(Inbox.shared.items.count) 条").font(.subheadline.weight(.semibold)).foregroundStyle(P.text)
                 Text(store.connected ? "可以发给 Claude 了" : "连上 Mac 后发送").font(.footnote).foregroundStyle(P.text2)
                 Spacer(minLength: 0)
                 Image(systemName: "chevron.right").font(.footnote.weight(.semibold)).foregroundStyle(P.text3)
@@ -143,7 +143,7 @@ struct InboxSheet: View {
             List {
                 if !store.connected {
                     Label("连不上 Mac。说的话先存在这里，连上以后再发。", systemImage: "wifi.slash")
-                        .font(.footnote).foregroundStyle(Color(red: 0.96, green: 0.84, blue: 0.54))
+                        .font(.footnote).foregroundStyle(P.warnText)
                 }
                 ForEach($inbox.items) { $item in
                     VStack(alignment: .leading, spacing: 8) {

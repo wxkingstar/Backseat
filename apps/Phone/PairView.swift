@@ -63,12 +63,12 @@ struct PairView: View {
             ScrollView {
                 VStack(alignment: .leading, spacing: 24) {
                     VStack(alignment: .leading, spacing: 8) {
-                        Image(systemName: "chevron.left.forwardslash.chevron.right")
-                            .font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                        Image("Logo").resizable().scaledToFit().foregroundStyle(.white)
+                            .frame(width: 40, height: 40)
                             .frame(width: 52, height: 52)
                             .background(RoundedRectangle(cornerRadius: 14, style: .continuous).fill(P.accentFill))
-                        Text("连接你的 Mac").font(.largeTitle.bold()).foregroundStyle(.white)
-                        Text("先在 Mac 上启动 Backseat，点菜单栏的 </> 图标能看到配对码。")
+                        Text("连接你的 Mac").font(.largeTitle.bold()).foregroundStyle(P.text)
+                        Text("先在 Mac 上启动 Backseat，点菜单栏的 Backseat 图标能看到配对码。")
                             .font(.subheadline).foregroundStyle(P.text2)
                     }
 
@@ -85,7 +85,7 @@ struct PairView: View {
                             if busy { ProgressView().tint(.white) }
                             Text(busy ? "配对中…" : "配对").font(.headline)
                         }
-                        .foregroundStyle(.white.opacity(ready || busy ? 1 : 0.45))
+                        .foregroundStyle(ready || busy ? Color.white : P.text3)
                         .frame(maxWidth: .infinity, minHeight: 56)
                     }
                     .buttonStyle(PressStyle(fill: ready || busy ? P.accentFill : P.key, radius: 16))
@@ -95,7 +95,6 @@ struct PairView: View {
             }
             .scrollDismissesKeyboard(.interactively)
         }
-        .preferredColorScheme(.dark)
         .onAppear { finder.start() }
         .onDisappear { finder.stop() }
         .onChange(of: finder.macs.first?.address) { _, first in
@@ -127,8 +126,8 @@ struct PairView: View {
                 Button { address = mac.address; manual = false } label: {
                     HStack(spacing: 12) {
                         Image(systemName: "desktopcomputer").font(.system(size: 18, weight: .semibold))
-                            .foregroundStyle(selected ? P.accent : .white)
-                        Text(mac.name).font(.body.weight(.medium)).foregroundStyle(.white)
+                            .foregroundStyle(selected ? P.accent : P.text)
+                        Text(mac.name).font(.body.weight(.medium)).foregroundStyle(P.text)
                         Spacer()
                         Image(systemName: selected ? "checkmark.circle.fill" : "circle")
                             .font(.system(size: 20)).foregroundStyle(selected ? P.accent : P.text3)
@@ -164,7 +163,7 @@ struct PairView: View {
                         let current = codeFocused && i == min(chars.count, 3)
                         Text(i < chars.count ? String(chars[i]) : "")
                             .font(.system(size: 30, weight: .semibold, design: .rounded).monospacedDigit())
-                            .foregroundStyle(.white)
+                            .foregroundStyle(P.text)
                             .frame(maxWidth: .infinity).frame(height: 64)
                             .background(RoundedRectangle(cornerRadius: 16, style: .continuous).fill(P.card))
                             .overlay(RoundedRectangle(cornerRadius: 16, style: .continuous)

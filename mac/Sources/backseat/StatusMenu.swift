@@ -8,15 +8,40 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let bridge: Bridge
     private let port: UInt16
 
+    /// Backseat 的标志：尖括号里一支麦克风。模板图，颜色跟着菜单栏 / 前景色走。
+    /// 坐标按 App 图标的 150×150 画布写，这里只取图形所在的那一块（x 17…133，y 39…108）
+    static func logo(height: CGFloat) -> NSImage {
+        let k = height / 69
+        let image = NSImage(size: NSSize(width: 116 * k, height: height), flipped: true) { _ in
+            let t = NSAffineTransform()
+            t.scale(by: k)
+            t.translateX(by: -17, yBy: -39)
+            t.concat()
+            NSColor.black.set()
+            let lines = NSBezierPath()
+            lines.lineWidth = 10
+            lines.lineCapStyle = .round
+            lines.lineJoinStyle = .round
+            lines.move(to: NSPoint(x: 42, y: 55)); lines.line(to: NSPoint(x: 22, y: 75)); lines.line(to: NSPoint(x: 42, y: 95))
+            lines.move(to: NSPoint(x: 108, y: 55)); lines.line(to: NSPoint(x: 128, y: 75)); lines.line(to: NSPoint(x: 108, y: 95))
+            // 麦克风下面的托弧（画布是翻转的，y 向下）
+            lines.move(to: NSPoint(x: 58, y: 74))
+            lines.appendArc(withCenter: NSPoint(x: 75, y: 74), radius: 17, startAngle: 180, endAngle: 0, clockwise: true)
+            lines.move(to: NSPoint(x: 75, y: 91)); lines.line(to: NSPoint(x: 75, y: 103))
+            lines.stroke()
+            NSBezierPath(roundedRect: NSRect(x: 66, y: 44, width: 18, height: 38), xRadius: 9, yRadius: 9).fill()
+            return true
+        }
+        image.isTemplate = true
+        return image
+    }
+
     init(bridge: Bridge, port: UInt16) {
         self.bridge = bridge
         self.port = port
         super.init()
-        // 和手机、手表 App 图标同一个符号：</>
-        let image = NSImage(systemSymbolName: "chevron.left.forwardslash.chevron.right", accessibilityDescription: "Backseat")?
-            .withSymbolConfiguration(.init(pointSize: 13, weight: .semibold))
-        image?.isTemplate = true
-        item.button?.image = image
+        // 和手机、手表 App 图标同一个图形：尖括号里一支麦克风
+        item.button?.image = Self.logo(height: 15)
         let menu = NSMenu()
         menu.delegate = self
         item.menu = menu
@@ -89,8 +114,7 @@ private struct MenuHeader: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack(spacing: 8) {
-                Image(systemName: "chevron.left.forwardslash.chevron.right")
-                    .font(.system(size: 12, weight: .bold)).foregroundStyle(.white)
+                Image(nsImage: StatusMenu.logo(height: 11)).foregroundStyle(.white)
                     .frame(width: 24, height: 24)
                     .background(RoundedRectangle(cornerRadius: 6, style: .continuous)
                         .fill(LinearGradient(colors: [Color(red: 1, green: 0.55, blue: 0.15), Color(red: 0.85, green: 0.25, blue: 0.35)],

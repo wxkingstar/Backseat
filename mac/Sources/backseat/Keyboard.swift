@@ -117,7 +117,7 @@ enum Keyboard {
             ev?.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
             ev?.setIntegerValueField(CGEventField(rawValue: 99)!, value: phase)
             ev?.flags = []
-            ev?.post(tap: .cghidEventTap)
+            emit(ev)
             return
         }
         // 目标点 3 秒内复用（查一次输入框位置要几十毫秒）
@@ -141,7 +141,7 @@ enum Keyboard {
         ev?.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         ev?.setIntegerValueField(CGEventField(rawValue: 99)!, value: phase)   // kCGScrollWheelEventScrollPhase
         ev?.flags = []
-        ev?.post(tap: .cghidEventTap)
+        emit(ev)
         if phase == 4 {
             let work = DispatchWorkItem {
                 guard let back = cursorBefore else { return }
@@ -167,7 +167,7 @@ enum Keyboard {
 
     /// 相对移动鼠标指针
     static func moveMouse(dx: Int, dy: Int) {
-        let cur = CGEvent(source: nil)?.location ?? .zero
+        let cur = pointer()
         let b = desktopBounds
         let p = CGPoint(x: min(max(cur.x + CGFloat(dx), b.minX), b.maxX - 1),
                         y: min(max(cur.y + CGFloat(dy), b.minY), b.maxY - 1))
@@ -176,7 +176,9 @@ enum Keyboard {
                          mouseType: leftDown ? .leftMouseDragged : .mouseMoved,
                          mouseCursorPosition: p, mouseButton: .left)
         ev?.flags = []
-        ev?.post(tap: .cghidEventTap)
+        emit(ev)
+        CursorOverlay.show(at: p)
+        phonePoint = p
         lastPointerMove = Date()
         // 指针已经由用户接管，不要再被「滚动结束后放回原位」拽走
         restoreWork?.cancel()
@@ -191,26 +193,41 @@ enum Keyboard {
                          wheelCount: 1, wheel1: Int32(clamping: amount), wheel2: 0, wheel3: 0)
         ev?.setIntegerValueField(.scrollWheelEventIsContinuous, value: 1)
         ev?.flags = .maskControl
-        ev?.post(tap: .cghidEventTap)
+        emit(ev)
     }
 
     private static var lastPointerMove = Date.distantPast
+    /// 手机最后一次把指针放到的位置
+    private static var phonePoint: CGPoint?
+
+    /// 手机操作应该作用的位置。
+    /// 手机刚操控过（8 秒内，也就是绿色指针还显示着）就用手机放的位置，而不是系统当前的指针位置：
+    /// 远程桌面连着的时候，对端的鼠标一动，这台 Mac 的指针就被拽到对端鼠标的位置，
+    /// 这时按系统指针位置去点，会点在对端鼠标那里，而不是手机上看到的绿色指针那里。
+    private static func pointer() -> CGPoint {
+        if let p = phonePoint, Date().timeIntervalSince(lastPointerMove) < 8 { return p }
+        return CGEvent(source: nil)?.location ?? .zero
+    }
     private static var leftDown = false
 
     /// 按下 / 松开左键（长按后拖拽用）
     static func mouseButton(down: Bool) {
         guard down != leftDown else { return }
         leftDown = down
-        let p = CGEvent(source: nil)?.location ?? .zero
+        let p = pointer()
         let ev = CGEvent(mouseEventSource: CGEventSource(stateID: .hidSystemState),
                          mouseType: down ? .leftMouseDown : .leftMouseUp, mouseCursorPosition: p, mouseButton: .left)
         ev?.flags = []
-        ev?.post(tap: .cghidEventTap)
+        emit(ev)
     }
 
     /// 在当前指针位置点一下。state = 2 表示这是双击的第二下（手机上连点两下时发）
     static func click(right: Bool, state: Int) {
-        let p = CGEvent(source: nil)?.location ?? .zero
+        let p = pointer()
+        CursorOverlay.show(at: p)
+        // 点击也算手机在操控，接着连点、双击都留在同一个位置
+        phonePoint = p
+        lastPointerMove = Date()
         let src = CGEventSource(stateID: .hidSystemState)
         let (down, up): (CGEventType, CGEventType) = right ? (.rightMouseDown, .rightMouseUp) : (.leftMouseDown, .leftMouseUp)
         for t in [down, up] {
@@ -220,7 +237,7 @@ enum Keyboard {
             // 明确不带任何修饰键。不清掉的话，鼠标事件会沿用系统当前的修饰键状态：
             // 刚发过带 Control 的事件（四指切换桌面、捏合缩放）后，单击会变成 Control+单击，也就是右键
             ev?.flags = []
-            ev?.post(tap: .cghidEventTap)
+            emit(ev)
         }
     }
 
@@ -233,14 +250,76 @@ enum Keyboard {
         "fn": (63, .maskSecondaryFn, 0),
     ]
 
-    /// 按下 / 松开语音输入法的长按快捷键（豆包默认是右 ⌘）
+    /// 按下 / 松开语音输入法的长按快捷键（豆包默认是右 ⌘）。只在主线程调用
     static func hold(_ key: String, down: Bool) {
         guard let k = holdKeys[key] else { return }
+        if down {
+            blockedReleases = 0
+            installHoldGuard()
+            holding = (k.code, k.flag)
+        } else {
+            holding = nil
+        }
         let src = CGEventSource(stateID: .hidSystemState)
         let ev = CGEvent(keyboardEventSource: src, virtualKey: k.code, keyDown: down)
         ev?.type = .flagsChanged
         ev?.flags = down ? CGEventFlags(rawValue: k.flag.rawValue | k.device) : []
+        ev?.setIntegerValueField(.eventSourceUserData, value: ownEventMark)
+        ev?.post(tap: CGEventTapLocation.cghidEventTap)
+    }
+
+    /// 发出一个鼠标 / 键盘事件。
+    /// 事件上带 RustDesk 自己发事件时用的标记（它的输入库 enigo 的 ENIGO_INPUT_EXTRA_VALUE）：
+    /// RustDesk 开着隐私模式 / 禁止本地输入时，会在最底层拦掉所有不带这个标记的鼠标点击和按键
+    /// （它把这些当成「本地有人在动这台电脑」）。不带标记的话，远程连着的时候手机的点击和按键全部石沉大海。
+    /// RustDesk 没在运行时这个标记没有任何作用。
+    private static func emit(_ ev: CGEvent?) {
+        ev?.setIntegerValueField(.eventSourceUserData, value: 100)
         ev?.post(tap: .cghidEventTap)
+    }
+
+    // MARK: - 按住期间不让别人把快捷键松开
+    //
+    // 我们「按住」右 ⌘ 只是发了一个按下事件，系统里并没有一只真的手按着。
+    // 远程桌面（RustDesk 等）每收到一次对端的鼠标 / 键盘事件，都会把本机的修饰键对齐成对端的状态：
+    // 对端没按 ⌘，它就替我们发一个 ⌘ 松开，输入法的语音条刚出来一秒就收了。
+    // 所以按住期间拦掉不是我们自己发的「松开」。
+
+    /// 正在按住的键；nil = 没在按
+    private static var holding: (code: CGKeyCode, flag: CGEventFlags)?
+    /// 这一轮拦下了几次外部的松开（记进日志，方便确认原因）
+    private(set) static var blockedReleases = 0
+    /// 我们自己发的事件带这个标记，拦截时放行
+    private static let ownEventMark: Int64 = 0x0BAC_5EA7
+    private static var holdGuard: CFMachPort?
+    /// 每种修饰键的左右两个键码：⌘、⌥、⌃、⇧
+    private static let modifierKeys: [Set<CGKeyCode>] = [[54, 55], [58, 61], [59, 62], [56, 60]]
+
+    private static func installHoldGuard() {
+        guard holdGuard == nil else { return }
+        let mask = (1 << CGEventType.flagsChanged.rawValue) | (1 << CGEventType.keyUp.rawValue)
+        guard let tap = CGEvent.tapCreate(tap: .cgSessionEventTap, place: .headInsertEventTap, options: .defaultTap,
+                                          eventsOfInterest: CGEventMask(mask), callback: { _, type, event, _ in
+            // 系统嫌回调慢或用户输入时会把拦截停掉，重新打开
+            if type == .tapDisabledByTimeout || type == .tapDisabledByUserInput {
+                if let t = Keyboard.holdGuard { CGEvent.tapEnable(tap: t, enable: true) }
+                return Unmanaged.passUnretained(event)
+            }
+            guard let h = Keyboard.holding,
+                  event.getIntegerValueField(.eventSourceUserData) != Keyboard.ownEventMark
+            else { return Unmanaged.passUnretained(event) }
+            // 同一种修饰键的左右两个键都要拦：对方松开时是左右一起发的，
+            // 只拦右 ⌘、放过左 ⌘ 的松开，输入法照样会当成松手
+            let code = CGKeyCode(event.getIntegerValueField(.keyboardEventKeycode))
+            let sameModifier = Keyboard.modifierKeys.first { $0.contains(h.code) }?.contains(code) ?? (code == h.code)
+            let releases = (type == .flagsChanged && !event.flags.contains(h.flag)) || (type == .keyUp && sameModifier)
+            guard releases else { return Unmanaged.passUnretained(event) }
+            Keyboard.blockedReleases += 1
+            return nil
+        }, userInfo: nil) else { return }
+        holdGuard = tap
+        CFRunLoopAddSource(CFRunLoopGetMain(), CFMachPortCreateRunLoopSource(nil, tap, 0), .commonModes)
+        CGEvent.tapEnable(tap: tap, enable: true)
     }
 
     private static func post(_ code: CGKeyCode, flags: CGEventFlags) {
@@ -248,7 +327,7 @@ enum Keyboard {
         for down in [true, false] {
             let ev = CGEvent(keyboardEventSource: src, virtualKey: code, keyDown: down)
             ev?.flags = flags
-            ev?.post(tap: .cghidEventTap)
+            emit(ev)
             usleep(8_000)
         }
     }

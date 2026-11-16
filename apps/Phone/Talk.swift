@@ -45,18 +45,27 @@ final class TalkController {
             return
         }
         let s = MicSession()
+        // 后台录音必须先有实时活动，系统才放行麦克风，所以先启动它
+        if quick { startActivity() }
+        // quick 这条路 App 多半在后台，要走后台能用的采集方式
+        let background = quick && UIApplication.shared.applicationState != .active
+        let onChunk: @Sendable (Int, Data) -> Void = { seq, pcm in Task { await s.push(seq, pcm) } }
         do {
-            try recorder.start { seq, pcm in Task { await s.push(seq, pcm) } }
+            try recorder.start(background: background, onChunk: onChunk)
         } catch {
-            flash(.failed("录音启动失败"))
-            return
+            if background { remoteLog("手机快捷说话：后台采集启动失败（\(error.localizedDescription)），改用前台的采集方式") }
+            // 后台那套起不来时退回前台的采集方式，总比完全录不了强
+            guard background, (try? recorder.start(onChunk: onChunk)) != nil else {
+                if quick { endActivity(after: 0) }
+                flash(.failed("录音启动失败"))
+                return
+            }
         }
         mic = s
         phase = .recording
         Haptics.medium()
         self.quick = quick
         if quick {
-            startActivity()
             // 没有界面盯着时长，自己到点结束
             Task { [weak self] in
                 try? await Task.sleep(for: .seconds(Recorder.maxDuration))
@@ -105,6 +114,7 @@ final class TalkController {
                 guard !cancel else { return }
                 // 文字直接看电脑；手机上只给一个「已输入」的震动
                 Haptics.success()
+                store.hasDraft = true
                 if phase == .syncing { phase = .idle }
                 if quick { await showReady() }
             } catch {
@@ -145,7 +155,11 @@ final class TalkController {
         let store = PhoneStore.shared
         switch action {
         case .toggle:
+            // 这条路没有界面可看（App 多半在后台），每一步都记到 Mac 日志里，出问题时才查得到
+            let state = UIApplication.shared.applicationState
+            remoteLog("手机快捷说话：系统调用了开始 / 结束，当前 \(phase)，App \(state == .active ? "在前台" : state == .background ? "在后台" : "未激活")")
             if isLive { finish(store) } else if phase != .syncing { begin(store, quick: true) }
+            remoteLog("手机快捷说话：处理后 \(phase)，实时活动\(activity == nil ? "没有启动" : "已启动")")
         case .cancel:
             if isLive { phase = .cancelArmed; finish(store) } else { endActivity(after: 0) }
         case .send:
@@ -201,6 +215,10 @@ final class TalkController {
         }
     }
 
+    private func remoteLog(_ text: String) {
+        Task { _ = try? await BridgeClient.shared.call("POST", "/api/log", body: ["text": text], timeout: 3) }
+    }
+
     private func flash(_ p: Phase) {
         phase = p
         Task {
@@ -217,27 +235,35 @@ struct TalkBar: View {
     let talk: TalkController
 
     var body: some View {
+        // 没有待处理的内容时只有说话条，两头顶满；说完有字了，清空和发送才从两边出来
         HStack(spacing: 10) {
-            Button { store.clearInput() } label: {
-                Image(systemName: "xmark").font(.system(size: 20, weight: .bold)).foregroundStyle(P.dangerText)
-                    .frame(width: 56, height: 56)
+            if store.hasDraft {
+                Button { store.clearInput() } label: {
+                    Image(systemName: "xmark").font(.system(size: 20, weight: .bold)).foregroundStyle(P.dangerText)
+                        .frame(width: 56, height: 56)
+                }
+                .buttonStyle(PressStyle(fill: P.dangerBg, radius: 28))
+                .accessibilityLabel("清空输入框")
+                .disabled(!store.connected)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
-            .buttonStyle(PressStyle(fill: P.dangerBg, radius: 28))
-            .accessibilityLabel("清空输入框")
-            .disabled(!store.connected)
 
             center
                 .frame(maxWidth: .infinity)
                 .frame(height: 56)
 
-            Button { talk.send(store) } label: {
-                Image(systemName: "arrow.up").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
-                    .frame(width: 56, height: 56)
+            if store.hasDraft || talk.phase == .delivered {
+                Button { talk.send(store) } label: {
+                    Image(systemName: "arrow.up").font(.system(size: 22, weight: .bold)).foregroundStyle(.white)
+                        .frame(width: 56, height: 56)
+                }
+                .buttonStyle(PressStyle(fill: P.ok, radius: 28))
+                .accessibilityLabel("发送")
+                .disabled(!store.connected)
+                .transition(.scale(scale: 0.6).combined(with: .opacity))
             }
-            .buttonStyle(PressStyle(fill: P.ok, radius: 28))
-            .accessibilityLabel("发送")
-            .disabled(!store.connected)
         }
+        .animation(.spring(response: 0.32, dampingFraction: 0.8), value: store.hasDraft)
         .opacity(talk.phase == .delivered ? 0.999 : 1)
     }
 
@@ -259,19 +285,19 @@ struct TalkBar: View {
                 Text("正在输入…").font(.subheadline).foregroundStyle(P.text2)
             }
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Capsule().fill(Color(white: 0.165)))
+            .background(Capsule().fill(P.raised))
         case .failed(let msg):
             Text(msg).font(.subheadline.weight(.semibold)).foregroundStyle(P.dangerText).lineLimit(1)
                 .frame(maxWidth: .infinity, maxHeight: .infinity)
-                .background(Capsule().fill(Color(white: 0.165)))
+                .background(Capsule().fill(P.raised))
         default:
             HStack(spacing: 8) {
                 Image(systemName: "mic").font(.system(size: 18, weight: .semibold)).foregroundStyle(P.accent)
                 Text("按住 说话").font(.headline).tracking(2)
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(P.text)
             .frame(maxWidth: .infinity, maxHeight: .infinity)
-            .background(Capsule().fill(Color(white: 0.165)).stroke(Color(white: 0.24)))
+            .background(Capsule().fill(P.raised).stroke(P.raisedLine))
             .contentShape(Capsule())
             .gesture(
                 DragGesture(minimumDistance: 0, coordinateSpace: .global)

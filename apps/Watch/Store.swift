@@ -61,6 +61,16 @@ final class Store {
     var talkPending = false
     var lastError: String?
 
+    /// 按键页直接摆出来的键；其余的收在「所有按键」里。在手表设置里选
+    var keys: [SideKeyKind] = SideKeyKind.load("watchKeys", fallback: SideKeyKind.watchDefaults) {
+        didSet { SideKeyKind.save(keys, "watchKeys") }
+    }
+
+    /// 按下一个键
+    func run(_ k: SideKeyKind) {
+        if let t = k.text { insert(t) } else if let key = k.key { press(key) }
+    }
+
     var autoSubmit: Bool {
         get { UserDefaults.standard.object(forKey: "autoSubmit") as? Bool ?? true }
         set { UserDefaults.standard.set(newValue, forKey: "autoSubmit") }

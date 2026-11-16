@@ -386,8 +386,11 @@ struct ActionKey: View {
     var repeats = false
     let action: () -> Void
 
-    @State private var pressed = false
-    @State private var repeater: Task<Void, Never>?
+    /// 手指是否按着。用 GestureState：手势被系统打断（放下手腕、弹出审批、别的手势抢走）时也会自动复位，
+    /// 不会出现松手了还在一直删的情况
+    @GestureState private var pressed = false
+    /// 这一次按下已经触发过第一下了
+    @State private var fired = false
     private let size: CGFloat = 44
 
     var body: some View {
@@ -401,31 +404,38 @@ struct ActionKey: View {
             .contentShape(Circle())
             .gesture(
                 DragGesture(minimumDistance: 0)
+                    .updating($pressed) { _, down, _ in down = true }
+                    // 连删键的第一下在手指碰到的那一刻就触发。不能放进下面的任务里：
+                    // 点得很快时，按下和抬起落在同一帧，界面看不到 pressed 变过，任务根本不会启动
                     .onChanged { _ in
-                        guard !pressed else { return }
-                        pressed = true
-                        if repeats { startRepeat() }
+                        guard repeats, !fired else { return }
+                        fired = true
+                        WKInterfaceDevice.current().play(.click)
+                        action()
                     }
                     .onEnded { _ in
-                        pressed = false
-                        if repeats { repeater?.cancel(); repeater = nil } else { action() }
+                        fired = false
+                        if !repeats { action() }
                     }
             )
+            // 手势被打断时没有 onEnded，靠 pressed 复位
+            .onChange(of: pressed) { _, down in if !down { fired = false } }
+            // 按住不放的连删。跟着 pressed 走：一松手（或手势被打断、按键从屏幕上消失）这个任务就被取消
+            .task(id: pressed) {
+                guard repeats, pressed else { return }
+                await repeatWhilePressed()
+            }
             .accessibilityLabel(label)
             .accessibilityAddTraits(.isButton)
             .accessibilityAction { action() }
     }
 
-    /// 先删一个；按住 0.4 秒后每 0.08 秒删一个
-    private func startRepeat() {
-        WKInterfaceDevice.current().play(.click)
-        action()
-        repeater = Task {
-            try? await Task.sleep(for: .milliseconds(400))
-            while !Task.isCancelled {
-                action()
-                try? await Task.sleep(for: .milliseconds(80))
-            }
+    /// 按住 0.4 秒后每 0.08 秒删一个（第一个在按下时已经删了）
+    private func repeatWhilePressed() async {
+        try? await Task.sleep(for: .milliseconds(400))
+        while !Task.isCancelled {
+            action()
+            try? await Task.sleep(for: .milliseconds(80))
         }
     }
 }

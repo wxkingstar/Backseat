@@ -35,6 +35,7 @@ bridge.log("backseat 已启动，端口 \(port)。等手表连接…")
 if let hookNote { bridge.log(hookNote) }
 bridge.log("配对码：\(bridge.pairCode)（第一次使用时，在手表或手机 App 里输入）")
 bridge.log("本机地址：\(Bridge.hosts.joined(separator: " / "))")
+bridge.log(bridge.voiceNote)
 Task { await Transcriber.prepare() }
 
 // Ctrl+C / kill 时走正常退出流程。不能在信号处理函数里直接清理：里面调 CoreAudio 会卡死
@@ -45,7 +46,6 @@ let signalSources = [SIGINT, SIGTERM].map { sig -> DispatchSourceSignal in
     src.resume()
     return src
 }
-atexit { VirtualMic.removeDevice() }
 
 // 菜单栏应用：不占 Dock。主线程跑 NSApplication，NSWorkspace.frontmostApplication 也能实时更新
 let app = NSApplication.shared

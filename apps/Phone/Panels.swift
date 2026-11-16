@@ -47,64 +47,8 @@ struct StatusCard: View {
         if !store.connected { return P.dangerText }
         if store.workingProject != nil { return P.accent }
         if store.lastKind == "done" { return P.okText }
-        if store.lastKind == "idle" { return Color(red: 0.96, green: 0.76, blue: 0.28) }
+        if store.lastKind == "idle" { return P.warn }
         return .gray
-    }
-}
-
-// MARK: - 更多按键
-
-struct MoreKeysSheet: View {
-    @Environment(PhoneStore.self) private var store
-    @Environment(\.dismiss) private var dismiss
-
-    var body: some View {
-        VStack(alignment: .leading, spacing: 12) {
-            HStack {
-                Text("更多按键").font(.title3.bold())
-                Spacer()
-                Button("完成") { dismiss() }.font(.body.weight(.semibold)).tint(P.accent).frame(minHeight: 44)
-            }
-            Text("选菜单 / 中断").font(.footnote).foregroundStyle(P.text2)
-            HStack(spacing: 10) {
-                Button { store.press("esc") } label: {
-                    VStack(spacing: 1) { Text("Esc").font(.body.weight(.semibold)); Text("中断").font(.caption2) }
-                        .foregroundStyle(P.dangerText).frame(maxWidth: .infinity, minHeight: 56)
-                }
-                .buttonStyle(PressStyle(fill: P.dangerBg, radius: 14))
-                ForEach(["1", "2", "3"], id: \.self) { k in key(k) { store.press(k) } }
-            }
-            Text("方向与编辑").font(.footnote).foregroundStyle(P.text2)
-            HStack(spacing: 10) {
-                icon("arrow.up", "上") { store.press("up") }
-                icon("arrow.down", "下") { store.press("down") }
-                key("Tab") { store.press("tab") }
-                key("空格") { store.press("space") }
-            }
-            Button { store.press("enter") } label: {
-                Label("回车", systemImage: "return").font(.body.weight(.bold)).foregroundStyle(.white)
-                    .frame(maxWidth: .infinity, minHeight: 56)
-            }
-            .buttonStyle(PressStyle(fill: P.accentFill, radius: 14))
-        }
-        .padding(.horizontal, 16).padding(.top, 20)
-        .frame(maxHeight: .infinity, alignment: .top)
-        .presentationBackground(P.card)
-    }
-
-    private func key(_ t: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Text(t).font(.body.weight(.semibold)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 56)
-        }
-        .buttonStyle(PressStyle(fill: Color(white: 0.17), radius: 14))
-    }
-
-    private func icon(_ name: String, _ label: String, _ action: @escaping () -> Void) -> some View {
-        Button(action: action) {
-            Image(systemName: name).font(.body.weight(.semibold)).foregroundStyle(.white).frame(maxWidth: .infinity, minHeight: 56)
-        }
-        .buttonStyle(PressStyle(fill: Color(white: 0.17), radius: 14))
-        .accessibilityLabel(label)
     }
 }
 
@@ -128,7 +72,7 @@ struct ApprovalSheet: View {
                 if store.pending.count > 1 {
                     Text("还有 \(store.pending.count - 1) 个").font(.footnote.weight(.semibold))
                         .padding(.horizontal, 10).padding(.vertical, 4)
-                        .background(Capsule().fill(Color(white: 0.17)))
+                        .background(Capsule().fill(P.raised))
                 }
             }
             ScrollView {
@@ -138,7 +82,7 @@ struct ApprovalSheet: View {
             }
             .frame(maxHeight: 120)
             .padding(14)
-            .background(RoundedRectangle(cornerRadius: 14).fill(Color(white: 0.055)))
+            .background(RoundedRectangle(cornerRadius: 14).fill(P.sunken))
 
             if risky {
                 Label("高风险操作，请确认后再允许", systemImage: "exclamationmark.triangle.fill")
@@ -183,8 +127,9 @@ struct ApprovalSheet: View {
 
 // MARK: - 设置
 
-struct SettingsSheet: View {
+struct SettingsPage: View {
     @Environment(PhoneStore.self) private var store
+    @AppStorage("appearance") private var appearance = "system"
     @AppStorage("mouseSpeed") private var mouseSpeed = 1.0
     @AppStorage("threeFinger") private var threeFinger = SwipeAction.spaces.rawValue
     @AppStorage("fourFinger") private var fourFinger = SwipeAction.off.rawValue
@@ -192,27 +137,48 @@ struct SettingsSheet: View {
     @State private var target = ""
     @State private var customHost = UserDefaults.standard.string(forKey: "customHost") ?? ""
 
+    /// 外观的一个选项：图标和文字排成一行，选中的用强调色描边
+    private func appearanceOption(_ value: String, _ title: String, _ icon: String) -> some View {
+        let selected = appearance == value
+        return Button { appearance = value } label: {
+            HStack(spacing: 5) {
+                Image(systemName: icon).font(.system(size: 14, weight: .semibold))
+                Text(title).font(.subheadline.weight(selected ? .semibold : .regular)).lineLimit(1).minimumScaleFactor(0.85)
+            }
+            .foregroundStyle(selected ? P.accent : P.text2)
+            .frame(maxWidth: .infinity, minHeight: 36)
+            .background(Capsule().fill(selected ? P.accent.opacity(0.12) : .clear))
+            .overlay(Capsule().stroke(selected ? P.accent : .clear, lineWidth: 1.5))
+            .contentShape(Rectangle())
+        }
+        .buttonStyle(.plain)
+        .accessibilityAddTraits(selected ? .isSelected : [])
+    }
+
     var body: some View {
-        @Bindable var store = store
-        NavigationStack {
+        GeometryReader { geo in
+            let hasSide = geo.safeAreaInsets.trailing > 60
             Form {
+                Section("外观") {
+                    HStack(spacing: 4) {
+                        appearanceOption("system", "跟随系统", "circle.lefthalf.filled")
+                        appearanceOption("light", "浅色", "sun.max")
+                        appearanceOption("dark", "深色", "moon")
+                    }
+                    .listRowInsets(EdgeInsets(top: 6, leading: 6, bottom: 6, trailing: 6))
+                }
+
                 Section {
-                    ForEach($store.phrases) { $p in
-                        HStack(spacing: 12) {
-                            TextField("短语内容", text: $p.text)
-                                .foregroundStyle(p.enabled ? .primary : .secondary)
-                            Toggle("显示", isOn: $p.enabled).labelsHidden()
+                    NavigationLink { PhrasesSettings() } label: {
+                        LabeledContent("快捷短语", value: "\(store.visiblePhrases.count) 条显示中")
+                    }
+                    // iPhone Duo 外屏右侧有一条系统状态栏，那一列快捷键只在这种屏幕上有
+                    if hasSide {
+                        NavigationLink { SideKeysSettings() } label: {
+                            LabeledContent("右侧快捷键", value: "\(store.sideKeys.count) 个")
                         }
                     }
-                    .onDelete { store.phrases.remove(atOffsets: $0) }
-                    .onMove { store.phrases.move(fromOffsets: $0, toOffset: $1) }
-                    Button { store.phrases.append(Phrase(text: "")) } label: {
-                        Label("添加短语", systemImage: "plus")
-                    }
-                    Button("恢复默认", role: .destructive) { store.phrases = Phrase.defaults }
-                } header: { Text("快捷短语") } footer: {
-                    Text("点文字直接改；关掉开关就从主屏隐藏；左滑删除；点右上角「编辑」可以拖动排序。全部隐藏后主屏不再显示这一块。")
-                }
+                } header: { Text("快捷操作") }
 
                 Section {
                     Picker("输入到", selection: $target) {
@@ -268,7 +234,7 @@ struct SettingsSheet: View {
             }
             .navigationTitle("设置")
             .navigationBarTitleDisplayMode(.inline)
-            .toolbar { EditButton() }
+            .modifier(DuoBackKey())
             .task {
                 if let r = try? await BridgeClient.shared.apps() {
                     apps = r.apps
@@ -276,5 +242,125 @@ struct SettingsSheet: View {
                 }
             }
         }
+    }
+}
+
+/// iPhone Duo：返回键放在右侧栏的系统状态图标下面，导航栏上不再放。普通 iPhone 不受影响
+struct DuoBackKey: ViewModifier {
+    @Environment(\.dismiss) private var dismiss
+
+    /// 右侧系统状态图标平时的下沿（距屏幕顶）。系统没有提供这块区域的尺寸（状态栏接口报的是 2pt 高的一条），只能按实测值写
+    static let statusBottom: CGFloat = 166
+
+    func body(content: Content) -> some View {
+        GeometryReader { geo in
+            let hasSide = geo.safeAreaInsets.trailing > 60
+            content
+                .navigationBarBackButtonHidden(hasSide)
+                .overlay {
+                    if hasSide {
+                        Button { dismiss() } label: {
+                            Image(systemName: "chevron.left")
+                                .font(.system(size: 17, weight: .semibold)).foregroundStyle(P.text)
+                                .frame(width: SideKeys.cell, height: SideKeys.cellHeight)
+                                .contentShape(Rectangle())
+                        }
+                        .buttonStyle(FlatKeyStyle())
+                        .padding(.vertical, 2)
+                        // 和主屏右侧那一列同一种胶囊底
+                        .sidePill()
+                        .accessibilityLabel("返回")
+                        // 和系统状态图标同一条中线（距屏幕右缘约 48pt），紧贴在它们下面
+                        .padding(.trailing, 48 - SideKeys.cell / 2)
+                        .padding(.top, Self.statusBottom + 10)
+                        .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topTrailing)
+                        .ignoresSafeArea()
+                    }
+                }
+        }
+    }
+}
+
+/// 设置 → 右侧快捷键：增删、拖动排序
+struct SideKeysSettings: View {
+    @Environment(PhoneStore.self) private var store
+
+    var body: some View {
+        let unused = SideKeyKind.allCases.filter { !store.sideKeys.contains($0) }
+        List {
+            Section {
+                ForEach(store.sideKeys) { Text($0.title) }
+                    .onDelete { store.sideKeys.remove(atOffsets: $0) }
+                    .onMove { store.sideKeys.move(fromOffsets: $0, toOffset: $1) }
+            } header: { Text("已添加") } footer: {
+                Text("这里从上到下就是屏幕上从上到下的顺序，最下面的离拇指最近。最多 \(SideKeyKind.limit) 个。")
+            }
+            if !unused.isEmpty {
+                Section("可以添加") {
+                    ForEach(unused) { k in
+                        Button { store.sideKeys.append(k) } label: {
+                            Label(k.title, systemImage: "plus.circle.fill")
+                        }
+                        .disabled(store.sideKeys.count >= SideKeyKind.limit)
+                    }
+                }
+            }
+            Section {
+                Button("恢复默认", role: .destructive) { store.sideKeys = SideKeyKind.defaults }
+            }
+        }
+        // 一直处于编辑状态：直接能拖动排序、点红色减号删除
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("右侧快捷键")
+        .navigationBarTitleDisplayMode(.inline)
+        .modifier(DuoBackKey())
+    }
+}
+
+/// 设置 → 快捷短语：改文字、隐藏、增删、拖动排序
+struct PhrasesSettings: View {
+    @Environment(PhoneStore.self) private var store
+
+    var body: some View {
+        @Bindable var store = store
+        List {
+            Section {
+                ForEach($store.phrases) { $p in
+                    HStack(spacing: 12) {
+                        TextField("短语内容", text: $p.text)
+                            .foregroundStyle(p.enabled ? .primary : .secondary)
+                        Toggle("显示", isOn: $p.enabled).labelsHidden()
+                    }
+                }
+                .onDelete { store.phrases.remove(atOffsets: $0) }
+                .onMove { store.phrases.move(fromOffsets: $0, toOffset: $1) }
+                Button { store.phrases.append(Phrase(text: "")) } label: {
+                    Label("添加短语", systemImage: "plus.circle.fill")
+                }
+            } footer: {
+                Text("默认都不显示，打开开关的才会出现在主屏。点文字直接改；拖右边的把手调整顺序。")
+            }
+            Section {
+                Button("恢复默认", role: .destructive) { store.phrases = Phrase.defaults }
+            }
+        }
+        // 一直处于编辑状态：直接能拖动排序、点红色减号删除
+        .environment(\.editMode, .constant(.active))
+        .navigationTitle("快捷短语")
+        .navigationBarTitleDisplayMode(.inline)
+        .modifier(DuoBackKey())
+    }
+}
+
+/// 隐藏系统返回键（iPhone Duo 上返回键放在右侧栏）后，系统会连带关掉「从屏幕左边缘右滑返回」。
+/// 这里重新打开：只要不是在最底下那一页，就允许滑动返回。
+extension UINavigationController: @retroactive UIGestureRecognizerDelegate {
+    override open func viewDidLoad() {
+        super.viewDidLoad()
+        interactivePopGestureRecognizer?.delegate = self
+    }
+
+    public func gestureRecognizerShouldBegin(_ gestureRecognizer: UIGestureRecognizer) -> Bool {
+        viewControllers.count > 1
     }
 }
