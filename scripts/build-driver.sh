@@ -13,7 +13,7 @@ clang -Wall -Wextra -O2 -bundle -arch arm64 -arch x86_64 -mmacosx-version-min=13
   -o "$DRIVER/Contents/MacOS/BackseatMic" "$ROOT/mac/Driver/BackseatMic.c"
 
 if [ -n "${BACKSEAT_SIGN_ID:-}" ]; then
-  codesign --force --options runtime --sign "$BACKSEAT_SIGN_ID" "$DRIVER"
+  codesign --force --timestamp --options runtime --sign "$BACKSEAT_SIGN_ID" "$DRIVER"
 else
   codesign --force --sign - "$DRIVER"
 fi

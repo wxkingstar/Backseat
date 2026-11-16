@@ -7,7 +7,12 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 # 已有配置时沿用其中的团队；否则从证书 OU 字段取（证书括号里的是个人 ID）
 TEAM=$(sed -nE 's/^DEVELOPMENT_TEAM = ([A-Z0-9]{10})$/\1/p' "$ROOT/apps/Config.local.xcconfig" 2>/dev/null || true)
 [ -z "$TEAM" ] && TEAM=$(security find-certificate -c "Apple Development" -p 2>/dev/null | openssl x509 -noout -subject 2>/dev/null | sed -nE 's/.*OU ?= ?([A-Z0-9]{10}).*/\1/p' | head -1)
-echo "DEVELOPMENT_TEAM = ${BACKSEAT_TEAM:-$TEAM}" > "$ROOT/apps/Config.local.xcconfig"
+# App 的 Bundle ID 默认带上团队 ID（保证每个人的都不重复）；已有配置里自己改过的话沿用
+BUNDLE=$(sed -nE 's/^BACKSEAT_BUNDLE_ID = (.+)$/\1/p' "$ROOT/apps/Config.local.xcconfig" 2>/dev/null || true)
+{
+  echo "DEVELOPMENT_TEAM = ${BACKSEAT_TEAM:-$TEAM}"
+  echo "BACKSEAT_BUNDLE_ID = ${BUNDLE:-dev.backseat.\$(DEVELOPMENT_TEAM).phone}"
+} > "$ROOT/apps/Config.local.xcconfig"
 echo "App 签名团队：${BACKSEAT_TEAM:-${TEAM:-未找到，请在 Xcode 里手动选择}}"
 
 if ! command -v xcodegen >/dev/null; then

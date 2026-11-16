@@ -40,7 +40,7 @@
 		<string>workout-processing</string>
 	</array>
 	<key>WKCompanionAppBundleIdentifier</key>
-	<string>dev.backseat.$(DEVELOPMENT_TEAM).phone</string>
+	<string>$(BACKSEAT_BUNDLE_ID)</string>
 	<key>WKRunsIndependentlyOfCompanionApp</key>
 	<true/>
 </dict>

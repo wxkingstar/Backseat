@@ -3,7 +3,7 @@ import AppIntents
 /// 给 Action Button / 快捷指令用：按一下就开始听写，说完直接发到 Mac。
 struct SendPromptIntent: AppIntent {
     static var title: LocalizedStringResource = "发送给 Claude"
-    static var description = IntentDescription("听写一句话，输入到 Mac 当前的 Claude 会话。")
+    static var description = IntentDescription("听写一句话，输入到电脑当前的 Claude 会话。")
 
     @Parameter(title: "内容", requestValueDialog: "让 Claude 做什么？")
     var text: String
@@ -18,7 +18,7 @@ struct SendPromptIntent: AppIntent {
 /// 给 Action Button 用：按一下开始说话，再按一下结束（系统不提供按住 / 松开事件，只能做成切换）。
 struct ToggleTalkIntent: AppIntent {
     static var title: LocalizedStringResource = "开始 / 结束说话"
-    static var description = IntentDescription("第一次按开始录音，第二次按结束，文字进入 Mac 的输入框。")
+    static var description = IntentDescription("第一次按开始录音，第二次按结束，文字进入电脑的输入框。")
     static var openAppWhenRun = true
 
     @MainActor

@@ -29,7 +29,7 @@ enum TalkBridge {
 /// 实时活动类意图系统一定交给主 App 进程执行。
 struct ToggleTalkIntent: AudioRecordingIntent, LiveActivityIntent {
     static var title: LocalizedStringResource = "开始 / 结束说话"
-    static var description = IntentDescription("按一下开始说话，再按一下结束，文字进入 Mac 的输入框。")
+    static var description = IntentDescription("按一下开始说话，再按一下结束，文字进入电脑的输入框。")
     static var openAppWhenRun = false
 
     @MainActor

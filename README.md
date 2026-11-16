@@ -1,22 +1,28 @@
-# Backseat
+# Backseat：Vibe Coding 键盘
 
-**AI 在驾驶座写代码，你坐在后座指挥。**
+**把 iPhone 和 Apple Watch 变成 Vibe Coding 的语音键盘。按住说话，文字直接打进 Mac 上的 Claude Code、Codex、Cursor。不用再单独买麦克风。**
 
-Backseat 把 iPhone 和 Apple Watch 变成 Mac 上 AI 编程助手（Claude Code、Codex、Cursor 等）的遥控器：按住说话就能下指令，手机屏幕当触控板，AI 要执行命令时在手机或手表上点「允许」。
-
-> Backseat turns your iPhone and Apple Watch into a remote for the AI coding agent running on your Mac: hold to talk, use the phone as a trackpad, and approve Claude Code's permission requests from your wrist. The apps and docs are currently in Chinese.
+> Backseat is a voice keyboard for vibe coding. Hold to talk on your iPhone or Apple Watch and the words are typed into whatever AI coding tool is in front on your Mac. It also gives you a trackpad, a few handy keys, and Claude Code approvals on your wrist. No extra microphone needed. The apps and docs are currently in Chinese.
 
 [![26 秒看懂 Backseat：按住说话、抬手审批、手机触控板](docs/demo.gif)](docs/demo.mp4)
 
-## 它解决什么问题
+## 它是什么，不是什么
 
-用 AI 写代码，大部分时间是在等：你说一句话，AI 干几分钟，然后停下来等你批准一条命令，或者等你说下一句。这期间你其实不需要坐在电脑前，但一离开就不知道它进行到哪、卡在哪。
+Vibe Coding 主要靠说：一句话交代需求，AI 去写。于是麦克风成了最重要的输入设备，而它偏偏是电脑上最弱的一环：
 
-有了 Backseat：
+- 电脑自带的麦克风要凑近了说，离远一点识别就不准。
+- 单独买一支桌面麦克风要几百块，还把你固定在桌子前。
+- 可你手边就有一支很好的麦克风：手机，还有手表。
 
-- 靠在沙发上、站着活动、去倒杯水，都能继续指挥：抬手说一句话，文字就出现在 Mac 的输入框里。
-- AI 干完了或在等你，手机和手表会震一下。
-- AI 想执行 `git push` 这类命令时，审批卡片直接推到手机 / 手表上，点一下就放行。
+Backseat 做的就是这件事：**把手机和手表接到 Mac 上，当一块无线的语音键盘用。**
+
+它**不是**远程桌面，也不是另一个 AI 客户端：不显示 Mac 的屏幕，不接管你的会话，不经过任何服务器。它只负责「输入」，和你桌上的键盘鼠标是同一类东西，所以 Mac 上最前面是什么 App，字就打进什么 App。
+
+除了说话，一块键盘该有的它也带了：
+
+- 回车、⌘⏎、退格、Esc、方向键这些常用键，说完顺手就发。
+- 手机屏幕当触控板，点个按钮不用伸手去够鼠标。
+- AI 干完了或在等你，手机和手表震一下；Claude Code 要执行 `git push` 这类命令时，在手机 / 手表上点一下就放行。
 
 ![Backseat 的手机界面：主屏、审批、浅色模式、设置](docs/screenshots.png)
 
@@ -56,20 +62,20 @@ iPhone / Apple Watch ──局域网──► Mac 上的 Backseat ──► 键�
 
 **1. Mac 端**
 
-```bash
-git clone https://github.com/wxkingstar/Backseat.git
-```
+一条命令：下载源码、编译、安装、启动。
 
 ```bash
-cd Backseat && bash scripts/build-pkg.sh
+curl -fsSL https://raw.githubusercontent.com/wxkingstar/Backseat/main/scripts/install.sh | bash
 ```
 
-生成安装包 `build/Backseat.pkg`，双击安装（要输一次开机密码）。它装两样东西：
+中途要输一次开机密码。前提是装过 Xcode 命令行工具（没装的话脚本会提示 `xcode-select --install`）。以后升级，重新运行同一条命令即可。已经 clone 了仓库的话，运行 `bash scripts/install.sh` 效果一样。
+
+它装两样东西：
 
 - 菜单栏 App：`/Applications/Backseat.app`
 - 一块虚拟声卡「Backseat Mic」：语音输入法靠它听到手机 / 手表传来的声音（原理见下面「语音输入」）
 
-装完系统的音频服务会自动重启一次（声音断一两秒），不用重启电脑。然后打开「应用程序」里的 Backseat，菜单栏会出现它的图标（尖括号里一支麦克风）。
+装完系统的音频服务会自动重启一次（声音断一两秒），不用重启电脑；Backseat 会自动打开，菜单栏出现它的图标（尖括号里一支麦克风）。
 
 第一次启动会做三件事：
 
@@ -219,7 +225,7 @@ Backseat 只在局域网里工作，不经过任何服务器。人在外面想�
 
 - `mac/`：Mac 端（Swift，无第三方依赖）。HTTP 服务、状态与审批队列、键盘鼠标注入、语音、菜单栏；`mac/Driver/` 是虚拟声卡驱动（C）。
 - `apps/`：iOS 和 watchOS App（SwiftUI，工程由 XcodeGen 从 `project.yml` 生成）。
-- `scripts/`：`build-pkg.sh` 做安装包（内部调用 `build-app.sh` 和 `build-driver.sh`），`start.sh` 从终端启动 Mac 端并打印日志，`setup.sh` 写入 App 签名团队并生成工程。
+- `scripts/`：`install.sh` 一条命令编译安装并启动，`build-pkg.sh` 做安装包（内部调用 `build-app.sh` 和 `build-driver.sh`），`start.sh` 从终端启动 Mac 端并打印日志，`setup.sh` 写入 App 签名团队并生成工程。
 
 改 Mac 端时不用每次装包：
 

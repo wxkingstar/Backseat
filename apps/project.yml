@@ -18,7 +18,7 @@ targets:
     settings:
       base:
         # 手表 App 是手机 App 的配套 App：Bundle ID 必须以手机 App 的为前缀，两边才能互传配对信息
-        PRODUCT_BUNDLE_IDENTIFIER: dev.backseat.$(DEVELOPMENT_TEAM).phone.watchkitapp
+        PRODUCT_BUNDLE_IDENTIFIER: $(BACKSEAT_BUNDLE_ID).watchkitapp
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
@@ -32,7 +32,7 @@ targets:
       properties:
         CFBundleDisplayName: Backseat
         WKApplication: true
-        WKCompanionAppBundleIdentifier: dev.backseat.$(DEVELOPMENT_TEAM).phone
+        WKCompanionAppBundleIdentifier: $(BACKSEAT_BUNDLE_ID)
         # 没有手机在身边也能单独用
         WKRunsIndependentlyOfCompanionApp: true
         NSAppTransportSecurity:
@@ -53,7 +53,7 @@ targets:
       - target: BackseatWatch
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.backseat.$(DEVELOPMENT_TEAM).phone
+        PRODUCT_BUNDLE_IDENTIFIER: $(BACKSEAT_BUNDLE_ID)
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"
@@ -63,6 +63,8 @@ targets:
       properties:
         CFBundleDisplayName: Backseat
         UILaunchScreen: {}
+        # 只走局域网明文 HTTP，没有用到需要申报的加密
+        ITSAppUsesNonExemptEncryption: false
         UIUserInterfaceStyle: Dark
         CADisableMinimumFrameDurationOnPhone: true
         NSSupportsLiveActivities: true
@@ -71,6 +73,7 @@ targets:
         NSAppTransportSecurity:
           NSAllowsLocalNetworking: true
         NSMicrophoneUsageDescription: 按住说话时录音，交给你的 Mac 转成文字。
+        NSCameraUsageDescription: Backseat 不使用相机。录音用到的系统组件同时支持相机，所以需要这项说明。
         NSSpeechRecognitionUsageDescription: 连不上 Mac 时，在手机上把说的话转成文字，存进灵感收件箱。
         NSLocalNetworkUsageDescription: 连接你 Mac 上的 backseat，用来输入文字、滚动和审批。
         NSBonjourServices: [_backseat._tcp]
@@ -81,7 +84,7 @@ targets:
     sources: [Widgets, PhoneShared]
     settings:
       base:
-        PRODUCT_BUNDLE_IDENTIFIER: dev.backseat.$(DEVELOPMENT_TEAM).phone.widgets
+        PRODUCT_BUNDLE_IDENTIFIER: $(BACKSEAT_BUNDLE_ID).widgets
         MARKETING_VERSION: "1.0"
         CURRENT_PROJECT_VERSION: "1"
         TARGETED_DEVICE_FAMILY: "1"

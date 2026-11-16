@@ -22,6 +22,8 @@
 	<string>1.0</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
+	<key>ITSAppUsesNonExemptEncryption</key>
+	<false/>
 	<key>NSAppTransportSecurity</key>
 	<dict>
 		<key>NSAllowsLocalNetworking</key>
@@ -31,6 +33,8 @@
 	<array>
 		<string>_backseat._tcp</string>
 	</array>
+	<key>NSCameraUsageDescription</key>
+	<string>Backseat 不使用相机。录音用到的系统组件同时支持相机，所以需要这项说明。</string>
 	<key>NSLocalNetworkUsageDescription</key>
 	<string>连接你 Mac 上的 backseat，用来输入文字、滚动和审批。</string>
 	<key>NSMicrophoneUsageDescription</key>

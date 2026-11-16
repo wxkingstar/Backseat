@@ -52,7 +52,7 @@ if [ -n "${BACKSEAT_SIGN_ID:-}" ]; then
 </dict>
 </plist>
 EOF
-  codesign --force --options runtime --entitlements "$ENT" --sign "$BACKSEAT_SIGN_ID" "$APP"
+  codesign --force --timestamp --options runtime --entitlements "$ENT" --sign "$BACKSEAT_SIGN_ID" "$APP"
   rm -f "$ENT"
 else
   codesign --force --sign - "$APP"
