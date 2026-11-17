@@ -17,6 +17,10 @@
   <a href="https://github.com/wxkingstar/Backseat/releases/latest/download/Backseat.pkg">Mac：下载安装包（双击安装）</a>
 </p>
 
+<p align="center">
+  注意：iPhone / Apple Watch 版目前没有在中国大陆区的 App Store 上架，大陆区 Apple ID 搜不到。需要切换到其他地区（如香港、美国）的 Apple ID 下载，或者从源码编译。Mac 安装包不受地区限制。
+</p>
+
 ## 它是什么，不是什么
 
 Vibe Coding 主要靠说：一句话交代需求，AI 去写。于是麦克风成了最重要的输入设备，而它偏偏是电脑上最弱的一环：
