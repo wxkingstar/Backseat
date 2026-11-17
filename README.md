@@ -6,6 +6,17 @@
 
 [![26 秒看懂 Backseat：按住说话、抬手审批、手机触控板](docs/demo.gif)](docs/demo.mp4)
 
+## 直接下载
+
+<p align="center">
+  <a href="https://apps.apple.com/app/id6835461317"><img src="docs/appstore-qr.png" width="220" alt="iPhone / Apple Watch 版 App Store 二维码"></a>
+</p>
+
+<p align="center">
+  <a href="https://apps.apple.com/app/id6835461317">iPhone / Apple Watch：App Store 直接下载</a> ·
+  <a href="https://github.com/wxkingstar/Backseat/releases/latest/download/Backseat.pkg">Mac：下载安装包（双击安装）</a>
+</p>
+
 ## 它是什么，不是什么
 
 Vibe Coding 主要靠说：一句话交代需求，AI 去写。于是麦克风成了最重要的输入设备，而它偏偏是电脑上最弱的一环：
