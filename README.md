@@ -56,7 +56,7 @@ iPhone / Apple Watch ──局域网──► Mac 上的 Backseat ──► 键�
 - Mac：macOS 26 或更新。
 - iPhone（iOS 18+）和 / 或 Apple Watch（watchOS 11+），和 Mac 在同一个局域网。
 - 想要边说边上屏：Mac 上装[豆包输入法](https://shurufa.doubao.com/)。不装也能用，会改用系统自带的识别（说完整段上屏）。
-- Mac 端有现成的安装包。手机和手表 App 正在 App Store 审核中，上架之前需要自己用 Xcode 编译安装。
+- 不想编译的话：手机和手表 App 已上架 App Store，Mac 端有现成的安装包，见下面的「安装」。
 
 ## 安装
 
@@ -89,6 +89,10 @@ curl -fsSL https://raw.githubusercontent.com/wxkingstar/Backseat/main/scripts/in
 
 **2. 手机 / 手表 App**
 
+直接在 App Store 搜索「Backseat」安装，或打开 <https://apps.apple.com/app/id6835461317>。手表 App 包含在同一个 App 里。
+
+想自己从源码编译（比如改代码、用开发版）的话：
+
 ```bash
 brew install xcodegen
 ```
@@ -98,6 +102,8 @@ bash scripts/setup.sh
 ```
 
 这一步把你的 Apple 开发者团队写进 `apps/Config.local.xcconfig`，并生成 `apps/Backseat.xcodeproj`。用 Xcode 打开它，运行目标选你的 iPhone（`Backseat`），按 ⌘R。手表 App 会随手机 App 一起装上；手表需要先打开开发者模式（设置 → 隐私与安全性 → 开发者模式）。
+
+注意：从源码编译需要付费的 Apple 开发者账号（Watch 端用到 HealthKit，免费账号一般签不了），并且 Bundle ID 要换成你自己的，App Store 上的版本用的是官方签名，不能直接覆盖。
 
 **3. 配对**
 
