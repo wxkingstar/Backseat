@@ -30,6 +30,28 @@ enum Setup {
         try? JSONSerialization.data(withJSONObject: cfg).write(to: configURL)
     }
 
+    /// 设置引导是否已经走完（config.json 的 onboarded）
+    static var onboarded: Bool {
+        get {
+            guard let data = try? Data(contentsOf: configURL),
+                  let cfg = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return false }
+            return cfg["onboarded"] as? Bool ?? false
+        }
+        set {
+            guard let data = try? Data(contentsOf: configURL),
+                  var cfg = try? JSONSerialization.jsonObject(with: data) as? [String: Any] else { return }
+            cfg["onboarded"] = newValue
+            try? JSONSerialization.data(withJSONObject: cfg).write(to: configURL)
+        }
+    }
+
+    /// Claude Code 的 settings.json 里是否已经有 Backseat 的 hook
+    static var hooksInstalled: Bool {
+        let settings = FileManager.default.homeDirectoryForCurrentUser.appendingPathComponent(".claude/settings.json")
+        guard let text = try? String(contentsOf: settings, encoding: .utf8) else { return false }
+        return text.contains(hookURL.path)
+    }
+
     /// 读取配置；第一次运行时生成 token 并写入 ~/.backseat/config.json
     static func config() -> [String: Any] {
         if let data = try? Data(contentsOf: configURL),

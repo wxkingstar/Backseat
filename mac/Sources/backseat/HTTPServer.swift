@@ -71,12 +71,13 @@ final class HTTPServer: @unchecked Sendable {
         self.handler = handler
     }
 
-    func start() {
+    /// onFailure：端口被占用等监听失败时调用（只调一次）
+    func start(onFailure: @escaping @Sendable () -> Void) {
         listener.newConnectionHandler = { [weak self] conn in self?.accept(conn) }
         listener.stateUpdateHandler = { state in
             if case .failed(let err) = state {
                 FileHandle.standardError.write(Data("监听失败: \(err)\n".utf8))
-                exit(1)
+                onFailure()
             }
         }
         listener.start(queue: queue)

@@ -9,7 +9,9 @@ let token = cfg["token"] as? String ?? ""
 let port = UInt16(cfg["port"] as? Int ?? 8787)
 let hookNote = Setup.installHooks()
 
-if !Keyboard.isTrusted(prompt: true) {
+// 不在这里弹系统的授权框：设置引导窗口里有「去授权」，按顺序带用户做
+let trustedAtLaunch = Keyboard.isTrusted(prompt: false)
+if !trustedAtLaunch {
     print("⚠️  还没有「辅助功能」权限：系统设置 → 隐私与安全性 → 辅助功能，打开 Backseat（从终端启动时是那个终端 App）。")
     print("   没有这个权限，手表发来的文字和按键无法注入（审批、提醒不受影响）。")
 }
@@ -26,11 +28,29 @@ if let ime = cfg["voiceIME"] as? [String: String], let source = ime["source"] {
     MicStream.voiceIME = .init(sourceID: source, holdKey: key)
 }
 
+/// 启动失败时弹窗说明再退出：菜单栏 App 没有窗口，直接退出用户只会觉得「打不开」
+@MainActor func fail(_ message: String) -> Never {
+    let alert = NSAlert()
+    alert.messageText = "Backseat 无法启动"
+    alert.informativeText = message
+    NSApp.setActivationPolicy(.accessory)
+    NSApp.activate()
+    alert.runModal()
+    exit(1)
+}
+let portNote = "端口 \(port) / \(port + 1) 被占用。可能 Backseat 已经在运行（看屏幕右上角菜单栏），或者别的程序占用了这个端口：在 ~/.backseat/config.json 里把 port 改成别的数字后重新打开。"
+
 let bridge = Bridge(token: token, port: port)
-let server = try HTTPServer(port: port) { req, res in bridge.handle(req, res) }
-server.start()
-// 手机的高频输入（滚动、鼠标、按键）走常连接，端口 = HTTP 端口 + 1
-let inputSocket = try InputSocket(port: port + 1, token: token) { bridge.log($0) }
+let server: HTTPServer
+let inputSocket: InputSocket
+do {
+    server = try HTTPServer(port: port) { req, res in bridge.handle(req, res) }
+    // 手机的高频输入（滚动、鼠标、按键）走常连接，端口 = HTTP 端口 + 1
+    inputSocket = try InputSocket(port: port + 1, token: token) { bridge.log($0) }
+} catch {
+    MainActor.assumeIsolated { fail(portNote) }
+}
+server.start { DispatchQueue.main.async { MainActor.assumeIsolated { fail(portNote) } } }
 inputSocket.start()
 bridge.log("backseat 已启动，端口 \(port)。等手表连接…")
 if let hookNote { bridge.log(hookNote) }
@@ -49,7 +69,25 @@ let signalSources = [SIGINT, SIGTERM].map { sig -> DispatchSourceSignal in
 }
 
 // 菜单栏应用：不占 Dock。主线程跑 NSApplication，NSWorkspace.frontmostApplication 也能实时更新
+/// 再次打开 Backseat（双击、启动台、Spotlight）时没有别的窗口可显示，就弹出设置引导
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    let onboarding: Onboarding
+    init(onboarding: Onboarding) { self.onboarding = onboarding }
+
+    func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows: Bool) -> Bool {
+        MainActor.assumeIsolated { onboarding.show() }
+        return false
+    }
+}
+
 let app = NSApplication.shared
 app.setActivationPolicy(.accessory)
-let statusMenu = StatusMenu(bridge: bridge, port: port)
+let onboarding = MainActor.assumeIsolated { Onboarding(bridge: bridge, port: port) }
+let delegate = AppDelegate(onboarding: onboarding)
+app.delegate = delegate
+let statusMenu = StatusMenu(bridge: bridge, port: port) { MainActor.assumeIsolated { onboarding.show() } }
+// 第一次启动，或者还没有辅助功能权限：直接弹出设置引导
+if !Setup.onboarded || !trustedAtLaunch {
+    DispatchQueue.main.async { MainActor.assumeIsolated { onboarding.show() } }
+}
 app.run()

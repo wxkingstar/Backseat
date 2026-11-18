@@ -21,6 +21,11 @@ cat > "$STAGE/scripts/postinstall" <<'POST'
 #!/bin/bash
 # 让系统的音频服务重新加载驱动（它会自己重新拉起来），新声卡马上出现
 /usr/bin/killall coreaudiod 2>/dev/null || true
+# 装完直接以当前登录用户身份打开 Backseat，首次启动会弹出设置引导
+CONSOLE_USER="$(/usr/bin/stat -f%Su /dev/console)"
+if [ -n "$CONSOLE_USER" ] && [ "$CONSOLE_USER" != "root" ]; then
+  /bin/launchctl asuser "$(/usr/bin/id -u "$CONSOLE_USER")" /usr/bin/sudo -u "$CONSOLE_USER" /usr/bin/open /Applications/Backseat.app || true
+fi
 exit 0
 POST
 chmod +x "$STAGE/scripts/postinstall"
@@ -41,5 +46,5 @@ PY
 SIGN=()
 if [ -n "${BACKSEAT_INSTALLER_ID:-}" ]; then SIGN=(--sign "$BACKSEAT_INSTALLER_ID"); fi
 pkgbuild --root "$STAGE/root" --component-plist "$STAGE/components.plist" --scripts "$STAGE/scripts" \
-  --identifier dev.backseat.pkg --version 1.0.1 --install-location / ${SIGN[@]+"${SIGN[@]}"} "$PKG" >/dev/null
+  --identifier dev.backseat.pkg --version 1.0.2 --install-location / ${SIGN[@]+"${SIGN[@]}"} "$PKG" >/dev/null
 echo "已生成 $PKG"

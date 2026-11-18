@@ -6,11 +6,15 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 APP="$ROOT/build/Backseat.app"
 
 cd "$ROOT/mac"
-swift build -c release 2>&1 | tail -1
+# 通用二进制：Apple 芯片和 Intel 的 Mac 都能打开
+ARCHS=(--arch arm64 --arch x86_64)
+swift build -c release "${ARCHS[@]}" 2>&1 | grep -v "is deprecated" | tail -1
+BIN="$(swift build -c release "${ARCHS[@]}" --show-bin-path)"
 
 rm -rf "$APP"
-mkdir -p "$APP/Contents/MacOS"
-cp .build/release/backseat "$APP/Contents/MacOS/Backseat"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
+cp "$BIN/backseat" "$APP/Contents/MacOS/Backseat"
+cp "$ROOT/mac/AppIcon.icns" "$APP/Contents/Resources/AppIcon.icns"
 cat > "$APP/Contents/Info.plist" <<'EOF'
 <?xml version="1.0" encoding="UTF-8"?>
 <!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
@@ -24,8 +28,16 @@ cat > "$APP/Contents/Info.plist" <<'EOF'
 	<string>Backseat</string>
 	<key>CFBundlePackageType</key>
 	<string>APPL</string>
+	<key>CFBundleIconFile</key>
+	<string>AppIcon</string>
+	<key>NSLocalNetworkUsageDescription</key>
+	<string>让同一个 Wi-Fi 下的 iPhone 和 Apple Watch 找到并连上这台 Mac。</string>
+	<key>NSBonjourServices</key>
+	<array>
+		<string>_backseat._tcp</string>
+	</array>
 	<key>CFBundleShortVersionString</key>
-	<string>1.0.1</string>
+	<string>1.0.2</string>
 	<key>CFBundleVersion</key>
 	<string>1</string>
 	<key>LSMinimumSystemVersion</key>

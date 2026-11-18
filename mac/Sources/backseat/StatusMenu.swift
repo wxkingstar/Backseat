@@ -7,6 +7,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
     private let item = NSStatusBar.system.statusItem(withLength: NSStatusItem.variableLength)
     private let bridge: Bridge
     private let port: UInt16
+    private let showOnboarding: () -> Void
 
     /// Backseat 的标志：尖括号里一支麦克风。模板图，颜色跟着菜单栏 / 前景色走。
     /// 坐标按 App 图标的 150×150 画布写，这里只取图形所在的那一块（x 17…133，y 39…108）
@@ -36,9 +37,10 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         return image
     }
 
-    init(bridge: Bridge, port: UInt16) {
+    init(bridge: Bridge, port: UInt16, showOnboarding: @escaping () -> Void) {
         self.bridge = bridge
         self.port = port
+        self.showOnboarding = showOnboarding
         super.init()
         // 和手机、手表 App 图标同一个图形：尖括号里一支麦克风
         item.button?.image = Self.logo(height: 15)
@@ -92,6 +94,7 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         if Bundle.main.bundleIdentifier != nil {
             action("登录时启动", "power", #selector(toggleLoginItem), on: SMAppService.mainApp.status == .enabled)
         }
+        action("设置向导…", "checklist", #selector(openOnboarding))
         menu.addItem(.separator())
         let quit = menu.addItem(withTitle: "退出 Backseat", action: #selector(quit), keyEquivalent: "q")
         quit.target = self
@@ -115,6 +118,8 @@ final class StatusMenu: NSObject, NSMenuDelegate {
         MicStream.voiceIME = .init(sourceID: ime.sourceID, holdKey: key)
         Setup.saveVoiceIME(source: ime.sourceID, holdKey: key)
     }
+
+    @objc private func openOnboarding() { showOnboarding() }
 
     @objc private func openAccessibility() {
         NSWorkspace.shared.open(URL(string: "x-apple.systempreferences:com.apple.preference.security?Privacy_Accessibility")!)

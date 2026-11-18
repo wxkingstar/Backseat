@@ -98,7 +98,7 @@ curl -fsSL https://raw.githubusercontent.com/wxkingstar/Backseat/main/scripts/in
 
 - 生成配对用的 token，存在 `~/.backseat/config.json`。
 - 把 Claude Code hooks 注册进 `~/.claude/settings.json`（原文件会先备份成 `settings.json.bak-backseat-*`）。
-- 弹出「辅助功能」授权：系统设置 → 隐私与安全性 → 辅助功能，打开 Backseat。没有这个权限就无法替你打字和按键，提醒和审批不受影响。
+- 弹出设置引导窗口，一步步带你完成：「辅助功能」授权（没有这个权限就无法替你打字和按键，提醒和审批不受影响）、检查虚拟麦克风和语音输入法、扫码安装手机 App、输入配对码。每一步做完会自动打勾。之后想再看，点菜单栏图标里的「设置向导…」，或者再打开一次 Backseat。
 
 如果系统防火墙询问是否允许接收连接，选**允许**。
 

@@ -39,6 +39,8 @@ final class Bridge: @unchecked Sendable {
     private var waiters: [(since: Int, responder: HTTPResponder)] = []
     private var remote = false
     private var lastWatchSeen = Date.distantPast
+    /// 最近 60 秒内有手机 / 手表用 token 访问过（设置引导里显示「已连接」）
+    var clientConnected: Bool { queue.sync { Date().timeIntervalSince(lastWatchSeen) < 60 } }
     /// 配对码（4 位，只在局域网里用）：手表 / 手机第一次连接时输入，换取 token。连错 5 次就换一个。
     private(set) var pairCode = Bridge.newPairCode()
     private var pairFailures = 0
