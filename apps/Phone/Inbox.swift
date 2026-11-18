@@ -57,6 +57,11 @@ final class Inbox {
         items.removeAll { $0.id == id }
     }
 
+    /// 清空收件箱，连同还没识别完的录音
+    func removeAll() {
+        items.map(\.id).forEach(remove)
+    }
+
     private func transcribe(_ id: UUID) async {
         guard let name = items.first(where: { $0.id == id })?.audio else { return }
         let url = Self.folder.appendingPathComponent(name)
@@ -136,6 +141,7 @@ struct InboxBanner: View {
 struct InboxSheet: View {
     @Environment(PhoneStore.self) private var store
     @Environment(\.dismiss) private var dismiss
+    @State private var confirmClear = false
 
     var body: some View {
         @Bindable var inbox = Inbox.shared
@@ -156,6 +162,11 @@ struct InboxSheet: View {
                             Text(item.date.formatted(date: .abbreviated, time: .shortened))
                                 .font(.footnote).foregroundStyle(.secondary)
                             Spacer()
+                            Button(role: .destructive) { inbox.remove(item.id) } label: {
+                                Image(systemName: "trash").frame(width: 44, height: 44)
+                            }
+                            .buttonStyle(.borderless)
+                            .accessibilityLabel("删除")
                             Button("发送") {
                                 store.send(item.text)
                                 inbox.remove(item.id)
@@ -174,7 +185,17 @@ struct InboxSheet: View {
             .navigationTitle("灵感收件箱")
             .navigationBarTitleDisplayMode(.inline)
             .toolbar {
+                ToolbarItem(placement: .cancellationAction) {
+                    if !inbox.items.isEmpty {
+                        Button("清空", role: .destructive) { confirmClear = true }
+                    }
+                }
                 ToolbarItem(placement: .confirmationAction) { Button("完成") { dismiss() } }
+            }
+            .confirmationDialog("清空收件箱里的 \(inbox.items.count) 条？", isPresented: $confirmClear, titleVisibility: .visible) {
+                Button("清空", role: .destructive) { inbox.removeAll() }
+            } message: {
+                Text("删掉后找不回来。")
             }
             .safeAreaInset(edge: .bottom) {
                 let ready = inbox.items.filter { !$0.text.isEmpty }
