@@ -7,7 +7,7 @@ struct InboxItem: Identifiable, Codable, Equatable {
     var id = UUID()
     var text: String
     var date = Date()
-    /// 还没识别成文字时，录音文件名（在 Documents/inbox 下）
+    /// 还没有可用转写时保留的录音文件名（在 Documents/inbox 下）
     var audio: String?
 }
 
@@ -15,6 +15,12 @@ struct InboxItem: Identifiable, Codable, Equatable {
 @MainActor @Observable
 final class Inbox {
     static let shared = Inbox()
+
+    enum TranscriptionState: Equatable {
+        case transcribing, unavailable, noSpeech, failed
+    }
+
+    private(set) var transcriptionStates: [UUID: TranscriptionState] = [:]
 
     var items: [InboxItem] = Inbox.load() {
         didSet { UserDefaults.standard.set(try? JSONEncoder().encode(items), forKey: "inbox") }
@@ -40,20 +46,35 @@ final class Inbox {
         do { try Self.wav(pcm).write(to: Self.folder.appendingPathComponent(name)) } catch { return }
         item.audio = name
         items.insert(item, at: 0)
-        Task { await transcribe(item.id) }
+        retry(item.id)
     }
 
-    /// 把还没识别出来的再试一遍（比如上次没网、识别模型还没下载好）
+    /// 重开收件箱时重试临时错误，但不重复尝试不支持的语音识别。
     func retryPending() {
         for item in items where item.audio != nil && item.text.isEmpty {
-            Task { await transcribe(item.id) }
+            let state = transcriptionStates[item.id]
+            if state == nil || state == .failed { retry(item.id) }
         }
+    }
+
+    func retry(_ id: UUID) {
+        guard let item = items.first(where: { $0.id == id }),
+              let url = recordingURL(for: item),
+              transcriptionStates[id] != .transcribing,
+              transcriptionStates[id] != .unavailable else { return }
+        transcriptionStates[id] = .transcribing
+        Task { await transcribe(id, url: url) }
+    }
+
+    func recordingURL(for item: InboxItem) -> URL? {
+        item.audio.map { Self.folder.appendingPathComponent($0) }
     }
 
     func remove(_ id: UUID) {
         if let name = items.first(where: { $0.id == id })?.audio {
             try? FileManager.default.removeItem(at: Self.folder.appendingPathComponent(name))
         }
+        transcriptionStates.removeValue(forKey: id)
         items.removeAll { $0.id == id }
     }
 
@@ -62,16 +83,24 @@ final class Inbox {
         items.map(\.id).forEach(remove)
     }
 
-    private func transcribe(_ id: UUID) async {
-        guard let name = items.first(where: { $0.id == id })?.audio else { return }
-        let url = Self.folder.appendingPathComponent(name)
-        // 识别出错（比如模型还没下载好）：保留录音，下次打开收件箱再试
-        guard let text = try? await PhoneTranscriber.transcribe(url),
-              let i = items.firstIndex(where: { $0.id == id }) else { return }
-        // 识别成功但没有内容（没说话、太小声）：标出来，不再一直转圈
-        items[i].text = text.isEmpty ? "（没识别出内容）" : text
-        items[i].audio = nil
-        try? FileManager.default.removeItem(at: url)
+    private func transcribe(_ id: UUID, url: URL) async {
+        let result = try? await PhoneTranscriber.transcribe(url)
+        guard let i = items.firstIndex(where: { $0.id == id }) else { return }
+
+        switch result {
+        case nil:
+            transcriptionStates[id] = .failed
+        case .some(.unavailable):
+            transcriptionStates[id] = .unavailable
+        case .some(.transcript(let text)) where text.isEmpty:
+            transcriptionStates[id] = .noSpeech
+        case .some(.transcript(let text)):
+            // 只有得到非空转写后，才释放原始录音。
+            items[i].text = text
+            items[i].audio = nil
+            transcriptionStates.removeValue(forKey: id)
+            try? FileManager.default.removeItem(at: url)
+        }
     }
 
     private static func wav(_ pcm: Data) -> Data {
@@ -87,6 +116,11 @@ final class Inbox {
 
 /// 手机本机的中文离线识别（和 Mac 端兜底用的是同一套系统能力）
 enum PhoneTranscriber {
+    enum Result {
+        case unavailable
+        case transcript(String)
+    }
+
     static func prepare() async {
         guard #available(iOS 26.0, *) else { return }
         guard let l = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh-CN")) else { return }
@@ -96,9 +130,9 @@ enum PhoneTranscriber {
         }
     }
 
-    static func transcribe(_ url: URL) async throws -> String {
-        guard #available(iOS 26.0, *) else { return "" }
-        guard let l = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh-CN")) else { return "" }
+    static func transcribe(_ url: URL) async throws -> Result {
+        guard #available(iOS 26.0, *) else { return .unavailable }
+        guard let l = await SpeechTranscriber.supportedLocale(equivalentTo: Locale(identifier: "zh-CN")) else { return .unavailable }
         let t = SpeechTranscriber(locale: l, preset: .transcription)
         let analyzer = SpeechAnalyzer(modules: [t])
         let file = try AVAudioFile(forReading: url)
@@ -112,7 +146,7 @@ enum PhoneTranscriber {
         var s = try await text.trimmingCharacters(in: .whitespacesAndNewlines)
         s = s.replacingOccurrences(of: "\\s+(?=[，。！？、；：,.!?])", with: "", options: .regularExpression)
         s = s.replacingOccurrences(of: "(?<=\\p{Han})\\s+(?=\\p{Han})", with: "", options: .regularExpression)
-        return s
+        return .transcript(s)
     }
 }
 
@@ -153,8 +187,24 @@ struct InboxSheet: View {
                 }
                 ForEach($inbox.items) { $item in
                     VStack(alignment: .leading, spacing: 8) {
-                        if item.audio != nil && item.text.isEmpty {
-                            HStack(spacing: 8) { ProgressView(); Text("正在识别…").foregroundStyle(.secondary) }
+                        if let url = inbox.recordingURL(for: item), item.text.isEmpty {
+                            switch inbox.transcriptionStates[item.id] {
+                            case .some(.transcribing):
+                                HStack(spacing: 8) { ProgressView(); Text("正在识别…").foregroundStyle(.secondary) }
+                            case .some(.unavailable):
+                                Text("当前设备不支持中文语音识别，录音已保留。").foregroundStyle(.secondary)
+                                ShareLink(item: url) { Label("分享录音", systemImage: "square.and.arrow.up") }
+                                    .buttonStyle(.borderless)
+                            default:
+                                let state = inbox.transcriptionStates[item.id]
+                                Text(state == .noSpeech ? "没识别出内容，录音已保留。" : "还没有转写结果，录音已保留。")
+                                    .foregroundStyle(.secondary)
+                                HStack {
+                                    Button("重试识别") { inbox.retry(item.id) }.buttonStyle(.borderless)
+                                    ShareLink(item: url) { Label("分享录音", systemImage: "square.and.arrow.up") }
+                                        .buttonStyle(.borderless)
+                                }
+                            }
                         } else {
                             TextField("内容", text: $item.text, axis: .vertical)
                         }
