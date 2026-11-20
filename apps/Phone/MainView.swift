@@ -44,7 +44,6 @@ struct MainView: View {
             .toolbar(.hidden, for: .navigationBar)
             .navigationDestination(isPresented: $showSettings) { SettingsPage() }
         }
-        .overlay(alignment: .top) { toast }
         // 全屏触控板：只留触控板，避免误触别的按钮
         .fullScreenCover(isPresented: $showPad) {
             ZStack {
@@ -81,6 +80,9 @@ struct MainView: View {
                 StatusCard()
                 if !Inbox.shared.items.isEmpty { InboxBanner { showInbox = true } }
                 TrackpadView { showPad = true }
+                    // 提示浮在触控板底部：不挡顶部的状态和按钮，又离下面刚点的按键近
+                    .overlay(alignment: .bottom) { toast }
+                    .animation(.spring(response: 0.3, dampingFraction: 0.85), value: store.toast)
                 // 全部隐藏时不占位置，触控板更大
                 if !store.visiblePhrases.isEmpty { phraseGrid }
                 // iPhone Duo：常用键都在右侧栏，这里不再放按键行，触控板更大
@@ -187,13 +189,27 @@ struct MainView: View {
 
     @ViewBuilder private var toast: some View {
         if let t = store.toast {
-            Text(t)
-                .font(.subheadline.weight(.medium))
-                .padding(.horizontal, 16).padding(.vertical, 10)
-                .background(.ultraThinMaterial, in: Capsule())
-                // iPhone Duo 外屏顶部没有安全区，留够边距才不会贴着屏幕上沿
-                .padding(.top, 16)
-                .transition(.move(edge: .top).combined(with: .opacity))
+            let undo = store.toastUndo != nil
+            HStack(spacing: 4) {
+                Text(t)
+                    .font(.subheadline.weight(.medium))
+                    .lineLimit(2).multilineTextAlignment(.center)
+                    .padding(.vertical, 10)
+                if undo {
+                    Button("撤回") { store.undoToast() }
+                        .font(.subheadline.weight(.semibold)).foregroundStyle(P.accent)
+                        .fixedSize()
+                        .padding(.horizontal, 10).frame(minHeight: 44)
+                        .contentShape(Rectangle())
+                }
+            }
+            .padding(.leading, 16).padding(.trailing, undo ? 6 : 16)
+            .background(.regularMaterial, in: Capsule())
+            .shadow(color: .black.opacity(0.12), radius: 8, y: 2)
+            .padding(.horizontal, 12).padding(.bottom, 12)
+            // 没有撤回按钮时只是提示，不挡触控板的手势
+            .allowsHitTesting(undo)
+            .transition(.move(edge: .bottom).combined(with: .opacity))
         }
     }
 }

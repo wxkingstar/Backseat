@@ -49,6 +49,10 @@ final class PhoneStore {
 
     var pending: [PendingApproval] = []
     var toast: String?
+    /// 提示条上「撤回」要做的事；没有就不显示按钮
+    var toastUndo: (() -> Void)?
+    /// 每次提示一个新 id：同样的文字连着出现时，旧的定时器不会把新的提前收掉
+    @ObservationIgnored private var toastID = UUID()
 
     /// 主屏的快捷短语：可在设置里改文字、隐藏、增删、排序；存在本机
     var phrases: [Phrase] = Phrase.load() {
@@ -202,7 +206,24 @@ final class PhoneStore {
     func clearInput() {
         Haptics.warning()
         Task {
-            do { try await client.setInput("", submit: false); hasDraft = false; show("已清空") }
+            // 先把输入框里的字读回来留着，清空后几秒内可以撤回；读不出来的应用（比如终端）就不给撤回
+            let saved = (try? await client.inputText()) ?? nil
+            do {
+                try await client.setInput("", submit: false)
+                hasDraft = false
+                if let saved, !saved.isEmpty {
+                    show("已清空", undo: { [weak self] in self?.restoreInput(saved) })
+                } else {
+                    show("已清空")
+                }
+            } catch { fail(error) }
+        }
+    }
+
+    /// 撤回清空：把原来的字写回 Mac 输入框
+    private func restoreInput(_ text: String) {
+        Task {
+            do { try await client.setInput(text, submit: false); hasDraft = true; Haptics.tap(); show("已撤回") }
             catch { fail(error) }
         }
     }
@@ -347,12 +368,24 @@ final class PhoneStore {
 
     // MARK: - 提示
 
-    func show(_ msg: String) {
+    /// undo 不为空时，提示条上带「撤回」按钮，停留 5 秒
+    func show(_ msg: String, undo: (() -> Void)? = nil) {
+        let id = UUID()
+        toastID = id
         toast = msg
+        toastUndo = undo
         Task {
-            try? await Task.sleep(for: .seconds(2.2))
-            if toast == msg { toast = nil }
+            try? await Task.sleep(for: .seconds(undo == nil ? 2.2 : 5))
+            if toastID == id { toast = nil; toastUndo = nil }
         }
+    }
+
+    /// 点了提示条上的「撤回」
+    func undoToast() {
+        let undo = toastUndo
+        toast = nil
+        toastUndo = nil
+        undo?()
     }
 
     private func fail(_ error: Error) {
