@@ -1,4 +1,3 @@
-import AVFoundation
 import Carbon
 import Foundation
 
@@ -21,16 +20,12 @@ final class MicStream: @unchecked Sendable {
 
     private let queue = DispatchQueue(label: "backseat.mic")
     private let virtualMic = VirtualMic()
-    private let format = AVAudioFormat(commonFormat: .pcmFormatFloat32, sampleRate: sampleRate,
-                                       channels: 1, interleaved: false)!
-    private var engine: AVAudioEngine?
-    private var player: AVAudioPlayerNode?
+    private var player: LoopbackPlayer?
     private var sessionID: String?
     private var mode: Engine = .apple
     private var nextSeq = 0
     private var pendingChunks: [Int: Data] = [:]
     private var collected = Data()        // apple 模式：整段收集
-    private var scheduledFrames: AVAudioFramePosition = 0
     /// 被语音输入法顶掉的原输入法，说完后切回去。只在主线程访问
     private var previousSource: TISInputSource?
     /// 第几轮说话（主线程访问）：延迟切回输入法前据此判断期间有没有开始新的一轮
@@ -96,26 +91,14 @@ final class MicStream: @unchecked Sendable {
             statChunks = 0; statBytes = 0; statPeak = 0; statLate = 0
             pendingChunks = [:]
             collected = Data()
-            scheduledFrames = 0
             mode = preferredEngine
             guard mode == .ime, let ime = Self.voiceIME, let loopback = virtualMic.deviceID else { return mode }
 
-            // 先把系统默认麦克风切过去，再建播放引擎。顺序不能反：
-            // 默认设备一变，系统会让已经在跑的引擎重新配置，把它的输出设备重置回扬声器，声音就播不进回环声卡了
+            // 系统默认麦克风切到回环声卡，输入法从它收音
             virtualMic.takeOverInput()
-            // 后面任何一步失败都要把默认麦克风还回去
-            var started = false
-            defer { if !started { virtualMic.releaseInput() } }
-            let e = AVAudioEngine()
-            // 把声音播给回环声卡，它的输入端就是输入法听到的麦克风
-            try e.outputNode.auAudioUnit.setDeviceID(loopback)
-            let p = AVAudioPlayerNode()
-            e.attach(p)
-            e.connect(p, to: e.mainMixerNode, format: format)
-            try e.start()
-            started = true
-            p.play()
-            engine = e
+            // 把声音播给回环声卡的输出端，它的输入端就是输入法听到的麦克风
+            let p = LoopbackPlayer(device: loopback)
+            do { try p.start() } catch { virtualMic.releaseInput(); throw error }
             player = p
             // 先垫 150ms 静音，让输入法开麦时不吃掉第一个字
             schedule(Data(count: Int(Self.sampleRate * 0.15) * 2))
@@ -179,9 +162,7 @@ final class MicStream: @unchecked Sendable {
             audioNote += "；输入法没有从 \(virtualMic.deviceName) 收音，请把输入法的麦克风设成「自动检测 / 跟随系统」"
         }
         let (m, pcm, remaining) = queue.sync { () -> (Engine, Data, Double) in
-            let played = player?.lastRenderTime.flatMap { player?.playerTime(forNodeTime: $0)?.sampleTime } ?? 0
-            let remain = Double(max(0, scheduledFrames - played)) / Self.sampleRate
-            return (mode, collected, remain)
+            (mode, collected, player?.remaining ?? 0)
         }
 
         if m == .ime, let ime = Self.voiceIME {
@@ -229,25 +210,12 @@ final class MicStream: @unchecked Sendable {
     // MARK: - 内部
 
     private func schedule(_ pcm: Data) {
-        guard let player else { return }
-        let frames = pcm.count / 2
-        guard frames > 0, let buf = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(frames))
-        else { return }
-        buf.frameLength = AVAudioFrameCount(frames)
-        let out = buf.floatChannelData![0]
-        pcm.withUnsafeBytes { raw in
-            let src = raw.bindMemory(to: Int16.self)
-            for i in 0..<frames { out[i] = Float(Int16(littleEndian: src[i])) / 32768 }
-        }
-        player.scheduleBuffer(buf)
-        scheduledFrames += AVAudioFramePosition(frames)
+        player?.schedule(pcm)
     }
 
     private func stopEngine() {
         player?.stop()
-        engine?.stop()
         player = nil
-        engine = nil
         sessionID = nil
     }
 
