@@ -173,6 +173,8 @@ private struct MenuHeader: View {
                 row("端口", "\(port)")
                 row("语音识别", voice)
                 row("辅助功能", trusted ? "已授权" : "未授权，文字和按键无法输入", warn: !trusted)
+                // 不是打包成 .app 运行（swift run）时没有版本号
+                row("版本", Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "开发版")
             }
         }
         .padding(.horizontal, 14).padding(.vertical, 12)
