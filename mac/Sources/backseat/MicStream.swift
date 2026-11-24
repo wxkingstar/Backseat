@@ -31,7 +31,12 @@ final class MicStream: @unchecked Sendable {
     private var pendingChunks: [Int: Data] = [:]
     private var collected = Data()        // apple 模式：整段收集
     private var scheduledFrames: AVAudioFramePosition = 0
+    /// 被语音输入法顶掉的原输入法，说完后切回去。只在主线程访问
     private var previousSource: TISInputSource?
+    /// 第几轮说话（主线程访问）：延迟切回输入法前据此判断期间有没有开始新的一轮
+    private var round = 0
+    /// 正在收尾的轮数（queue 上访问）：新一轮开始前要等它归零
+    private var finishing = 0
     /// 最近一次开麦时的焦点处理结果（给日志用）
     private(set) var focusNote = ""
     /// 最近一次取消的处理结果（给日志用）
@@ -73,6 +78,15 @@ final class MicStream: @unchecked Sendable {
 
     // MARK: - 会话
 
+    /// 等上一轮收尾（松快捷键、停播放、还麦克风、退格 / 回车）做完，最多等 4 秒（手机开麦请求 5 秒超时）。
+    /// 不等的话，上一轮晚到的松键和停播放会落在新一轮上，新一轮一个字也进不去
+    func waitUntilIdle() async {
+        for _ in 0..<80 {
+            if queue.sync(execute: { finishing == 0 }) { return }
+            try? await Task.sleep(for: .milliseconds(50))
+        }
+    }
+
     /// 开始一段说话。返回实际使用的引擎。
     func start(id: String) throws -> Engine {
         try queue.sync { () throws -> Engine in
@@ -110,6 +124,7 @@ final class MicStream: @unchecked Sendable {
                 focusNote = Focus.ensureInput()
                 // 记下开说前输入框里的内容，取消时据此删掉这一轮说进去的字
                 baseline = Focus.focusedText()
+                round += 1
                 Self.activateIME(ime, saving: &previousSource)
                 Keyboard.hold(ime.holdKey, down: true)
             }
@@ -141,6 +156,8 @@ final class MicStream: @unchecked Sendable {
     /// 结束说话。ime 模式：等音频播完再松开快捷键，由输入法上屏；apple 模式：转写后粘贴。
     /// 返回识别出的文字（ime 模式拿不到文字，返回 nil）。
     func finish(id: String, lastSeq: Int, submit: Bool, cancel: Bool) async -> (Engine, String?) {
+        queue.sync { finishing += 1 }
+        defer { queue.sync { finishing -= 1 } }
         // 等迟到的分片（最多 1.5 秒）
         for _ in 0..<30 {
             let done = queue.sync { nextSeq > lastSeq || sessionID != id }
@@ -173,6 +190,8 @@ final class MicStream: @unchecked Sendable {
                 queue.sync { schedule(Data(count: Int(Self.sampleRate * 0.3) * 2)) }
                 try? await Task.sleep(for: .seconds(remaining + 0.35))
             }
+            // 新一轮等收尾超时后已经开始了：快捷键、播放和麦克风都归它，这一轮不能再动
+            guard queue.sync(execute: { sessionID == id }) else { return (.ime, nil) }
             await MainActor.run { Keyboard.hold(ime.holdKey, down: false) }
             queue.sync { stopEngine() }
             virtualMic.releaseInput()
@@ -237,19 +256,24 @@ final class MicStream: @unchecked Sendable {
         let cur = TISCopyCurrentKeyboardInputSource().takeRetainedValue()
         let curID = TISGetInputSourceProperty(cur, kTISPropertyInputSourceID)
             .map { Unmanaged<CFString>.fromOpaque($0).takeUnretainedValue() as String }
+        // 已经是语音输入法时不动 prev：上一轮还没来得及切回的原输入法留给这一轮说完再切
         if curID != ime.sourceID {
             prev = cur
             TISSelectInputSource(target)
-        } else {
-            prev = nil
         }
     }
 
     private func restoreSource() {
-        guard let prev = previousSource else { return }
-        previousSource = nil
-        // 立即切回会打断输入法上屏，等它出完最终结果再切
-        DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) { TISSelectInputSource(prev) }
+        DispatchQueue.main.async {
+            let r = self.round
+            // 立即切回会打断输入法上屏，等它出完最终结果再切；
+            // 期间开始了新的一轮就不切（否则会在新一轮说话中途把语音输入法切走），由那一轮说完再切
+            DispatchQueue.main.asyncAfter(deadline: .now() + 2.5) {
+                guard r == self.round, let prev = self.previousSource else { return }
+                self.previousSource = nil
+                TISSelectInputSource(prev)
+            }
+        }
     }
 
     /// 给 Int16 PCM 加 WAV 头，交给内置识别

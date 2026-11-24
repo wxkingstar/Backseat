@@ -164,13 +164,19 @@ final class Bridge: @unchecked Sendable {
         case ("POST", "/api/mic/start"):
             // 手表开始按住说话：输入法模式下开虚拟麦克风并按下语音快捷键
             let id = req.json()["id"] as? String ?? UUID().uuidString
-            do {
-                let engine = try mic.start(id: id)
-                log("开始说话（\(engine == .ime ? MicStream.imeName : "Mac 内置识别")）→ \(Keyboard.frontAppName)，\(mic.focusNote)")
-                res.send(json: ["ok": true, "engine": engine.rawValue, "target": Keyboard.frontAppName])
-            } catch {
-                log("虚拟麦克风启动失败：\(error.localizedDescription)")
-                res.send(500, json: ["error": "麦克风启动失败"])
+            // 上一轮可能还在收尾（等尾音播完再松快捷键），先等它做完，免得它的松键和停播放落到这一轮上
+            Task {
+                await self.mic.waitUntilIdle()
+                self.queue.async {
+                    do {
+                        let engine = try self.mic.start(id: id)
+                        self.log("开始说话（\(engine == .ime ? MicStream.imeName : "Mac 内置识别")）→ \(Keyboard.frontAppName)，\(self.mic.focusNote)")
+                        res.send(json: ["ok": true, "engine": engine.rawValue, "target": Keyboard.frontAppName])
+                    } catch {
+                        self.log("虚拟麦克风启动失败：\(error.localizedDescription)")
+                        res.send(500, json: ["error": "麦克风启动失败"])
+                    }
+                }
             }
 
         case ("POST", "/api/mic/chunk"):
