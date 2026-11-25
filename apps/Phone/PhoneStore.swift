@@ -75,6 +75,8 @@ final class PhoneStore {
 
     private let client = BridgeClient.shared
     private var seq = -1
+    /// Mac 上回车发送的计数，上次看到的值
+    private var macSubmits: Int?
     private var loadedOnce = false
     private var pollTask: Task<Void, Never>?
     private let iso = ISO8601DateFormatter()
@@ -167,6 +169,14 @@ final class PhoneStore {
             case "idle": Haptics.tap()
             default: break
             }
+        }
+        // 在电脑上按回车发出去了：手机上的清空 / 发送没用了，跟着收起来
+        if let n = r["submits"] as? Int {
+            if let old = macSubmits, n != old {
+                hasDraft = false
+                TalkController.shared.sentOnMac()
+            }
+            macSubmits = n
         }
         seq = r["seq"] as? Int ?? seq
     }
