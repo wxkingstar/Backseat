@@ -133,6 +133,12 @@ final class TalkController {
         }
     }
 
+    /// 在电脑上按回车发出去了：锁屏卡片上的发送 / 清空也跟着收起（正在说的那一轮不动）
+    func sentOnMac() {
+        guard !isLive, phase != .syncing else { return }
+        endActivity(after: 0)
+    }
+
     /// 这句话没能送到 Mac：存进灵感收件箱，用手机识别成文字
     private func saveToInbox(_ s: MicSession, quick: Bool) async {
         Inbox.shared.add(pcm: await s.recorded)

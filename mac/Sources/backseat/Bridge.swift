@@ -38,6 +38,8 @@ final class Bridge: @unchecked Sendable {
     private var sessions: [String: Session] = [:]
     private var waiters: [(since: Int, responder: HTTPResponder)] = []
     private var remote = false
+    /// 电脑上按回车发出去的次数。手机看到它变了，就收起清空 / 发送键
+    private var submits = 0
     private var lastWatchSeen = Date.distantPast
     /// 最近 60 秒内有手机 / 手表用 token 访问过（设置引导里显示「已连接」）
     var clientConnected: Bool { queue.sync { Date().timeIntervalSince(lastWatchSeen) < 60 } }
@@ -381,6 +383,9 @@ final class Bridge: @unchecked Sendable {
 
     private func bump() { seq += 1; flush() }
 
+    /// 电脑上的输入框内容被回车发出去了
+    func inputSubmitted() { queue.async { self.submits += 1; self.bump() } }
+
     private func flush() {
         let ws = waiters
         waiters.removeAll()
@@ -400,7 +405,7 @@ final class Bridge: @unchecked Sendable {
         let sess = sessions.values.sorted { $0.since > $1.since }.map {
             ["project": $0.project, "working": $0.working, "since": iso.string(from: $0.since)] as [String: Any]
         }
-        return ["seq": seq, "remote": remote, "frontApp": Keyboard.frontAppName,
+        return ["seq": seq, "remote": remote, "frontApp": Keyboard.frontAppName, "submits": submits,
                 "pending": pend, "events": Array(newEvents), "sessions": sess]
     }
 

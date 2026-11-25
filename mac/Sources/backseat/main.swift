@@ -52,6 +52,7 @@ do {
 }
 server.start { DispatchQueue.main.async { MainActor.assumeIsolated { fail(portNote) } } }
 inputSocket.start()
+SubmitWatch.start { bridge.inputSubmitted() }
 bridge.log("backseat 已启动，端口 \(port)。等手表连接…")
 if let hookNote { bridge.log(hookNote) }
 bridge.log("配对码：\(bridge.pairCode)（第一次使用时，在手表或手机 App 里输入）")
