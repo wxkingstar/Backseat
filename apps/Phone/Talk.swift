@@ -83,27 +83,35 @@ final class TalkController {
     }
 
     func drag(_ dy: CGFloat) {
+        armCancel(dy < -Self.cancelDistance)
+    }
+
+    /// 手指进出取消区
+    func armCancel(_ on: Bool) {
         guard isLive else { return }
-        let next: Phase = dy < -Self.cancelDistance ? .cancelArmed : .recording
+        let next: Phase = on ? .cancelArmed : .recording
         if next != phase {
             phase = next
             Haptics.tap()
         }
     }
 
-    func finish(_ store: PhoneStore) {
-        guard let s = mic, isLive else { return }
+    /// silent：这一下其实是滑动手势（极致语音模式的左右滑），悄悄丢掉这一轮，不震动、不提示。
+    /// 返回收尾的任务，调用方要等 Mac 那边结束这一轮再做别的事时可以 await
+    @discardableResult
+    func finish(_ store: PhoneStore, silent: Bool = false) -> Task<Void, Never>? {
+        guard let s = mic, isLive else { return nil }
         mic = nil
-        let cancel = phase == .cancelArmed || recorder.elapsed < 0.6
-        let tooShort = phase != .cancelArmed && recorder.elapsed < 0.6
+        let cancel = silent || phase == .cancelArmed || recorder.elapsed < 0.6
+        let tooShort = !silent && phase != .cancelArmed && recorder.elapsed < 0.6
         let diag = recorder.diagnostics
         let lastSeq = recorder.stop()
         phase = cancel ? .idle : .syncing
-        if cancel { Haptics.warning() }
+        if cancel && !silent { Haptics.warning() }
         if tooShort { flash(.failed("按住不放，说完再松手")) }
         let quick = self.quick
         if quick { cancel ? endActivity(after: 0) : updateActivity(.processing) }
-        Task {
+        return Task {
             guard await s.drain() else {
                 if !cancel { await self.saveToInbox(s, quick: quick) }
                 return
