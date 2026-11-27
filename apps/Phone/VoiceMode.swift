@@ -2,10 +2,12 @@ import SwiftUI
 
 /// 极致语音模式：上 1/3 看状态和电脑输入框里的字，下 2/3 整块是一个大按钮，不看屏幕也能操作。
 /// 按住说话、松手进输入框；按住上滑进上面那 1/3 取消；快速左滑清空、右滑发送。
-struct VoiceModeView: View {
+/// 大按钮正上方可以放一排常用键（逗号、换行这些低频操作）
+struct VoiceModeView<Keys: View>: View {
     @Environment(PhoneStore.self) private var store
     let talk: TalkController
     let exit: () -> Void
+    @ViewBuilder var keys: Keys
 
     /// 电脑输入框里的字：nil = 这个应用读不出来（比如终端）
     @State private var macText: String? = ""
@@ -13,28 +15,34 @@ struct VoiceModeView: View {
     @State private var downAt: Date?
     /// 这一次按下被认成了快速横滑：-1 左（清空），1 右（发送）
     @State private var swipe = 0
-
-    /// 按下后多久内的横向快速移动算滑动手势；超过这个时间就只当在说话
-    private static let swipeWindow: TimeInterval = 0.35
-    private static let swipeDistance: CGFloat = 50
+    /// 点了底边的「清空 / 发送」字样：在按钮中间提示改用滑动。-1 清空，1 发送，0 不显示
+    @State private var tapHint = 0
+    /// 每次提示一个新 id：连着点时，上一次的定时器不会把这次的提示提前收掉
+    @State private var tapHintID = UUID()
 
     var body: some View {
         GeometryReader { geo in
-            let bigHeight = (geo.size.height * 2 / 3).rounded()
+            let bigHeight = VoiceLayout.bigHeight(geo.size.height)
             let bigTop = geo.size.height - bigHeight
             VStack(spacing: 12) {
-                Group {
-                    if talk.isLive { cancelZone } else { topArea }
+                // 说话时上面整块（连同按键）都是取消区
+                if talk.isLive {
+                    cancelZone.frame(height: bigTop - 12)
+                } else {
+                    VStack(spacing: 12) {
+                        topArea
+                        keys
+                    }
+                    .frame(height: bigTop - 12)
                 }
-                .frame(height: bigTop - 12)
-                bigButton(bigTop: bigTop)
+                bigButton(bigTop: bigTop, size: geo.size)
                     .frame(height: bigHeight)
             }
             .coordinateSpace(name: "voice")
         }
         .padding(.horizontal, 16)
-        .padding(.top, 12)
-        .padding(.bottom, 8)
+        .padding(.top, VoiceLayout.topPad)
+        .padding(.bottom, VoiceLayout.bottomPad)
         .background(P.bg.ignoresSafeArea())
         .animation(.easeOut(duration: 0.12), value: talk.isLive)
         .task(id: refreshKey) { await pollInput() }
@@ -46,12 +54,12 @@ struct VoiceModeView: View {
         VStack(spacing: 12) {
             HStack(spacing: 8) {
                 Button(action: exit) {
-                    Label("退出", systemImage: "xmark")
+                    Label("切换模式", systemImage: "arrow.left.arrow.right")
                         .font(.subheadline.weight(.semibold)).foregroundStyle(P.text)
                         .padding(.horizontal, 14).frame(height: 44)
                         .background(Capsule().fill(P.card).stroke(P.line))
                 }
-                .accessibilityLabel("退出极致语音模式")
+                .accessibilityLabel("切换到普通模式")
                 Spacer(minLength: 0)
                 HStack(spacing: 6) {
                     Circle().fill(store.connected ? P.okText : P.dangerText).frame(width: 6, height: 6)
@@ -113,19 +121,19 @@ struct VoiceModeView: View {
 
     // MARK: - 下 2/3：大按钮
 
-    private func bigButton(bigTop: CGFloat) -> some View {
+    private func bigButton(bigTop: CGFloat, size: CGSize) -> some View {
         ZStack {
             RoundedRectangle(cornerRadius: 32, style: .continuous).fill(fill)
                 .overlay(RoundedRectangle(cornerRadius: 32, style: .continuous)
                     .stroke(talk.phase == .idle ? P.raisedLine : .clear, lineWidth: 1.5))
-            content
+            if tapHint != 0 && !talk.isLive { tapHintView } else { content }
             if !talk.isLive { swipeHints }
         }
         .contentShape(RoundedRectangle(cornerRadius: 32, style: .continuous))
         .gesture(
             DragGesture(minimumDistance: 0, coordinateSpace: .named("voice"))
                 .onChanged { v in changed(v, bigTop: bigTop) }
-                .onEnded { _ in ended() }
+                .onEnded { v in ended(v, size: size) }
         )
         .accessibilityElement(children: .ignore)
         .accessibilityLabel("按住说话")
@@ -200,6 +208,19 @@ struct VoiceModeView: View {
         .allowsHitTesting(false)
     }
 
+    /// 点了底边字样时的提示：清空 / 发送要靠滑，不是点
+    private var tapHintView: some View {
+        let left = tapHint < 0
+        return VStack(spacing: 14) {
+            Image(systemName: left ? "arrow.left" : "arrow.right")
+                .font(.system(size: 44, weight: .bold))
+                .foregroundStyle(left ? P.dangerText : P.okText)
+            Text(left ? "向左滑 清空" : "向右滑 发送").font(.title2.weight(.semibold)).foregroundStyle(P.text)
+            Text("在大按钮上任意位置快速\(left ? "左" : "右")滑，不用点").font(.subheadline).foregroundStyle(P.text2)
+        }
+        .transition(.opacity)
+    }
+
     /// 输入框里有没有能发的字（读不出来的应用就按手机这边记的草稿算）
     private var hasText: Bool {
         store.hasDraft || !(macText ?? "").isEmpty
@@ -216,8 +237,8 @@ struct VoiceModeView: View {
         }
         guard swipe == 0 else { return }
         let dx = v.translation.width, dy = v.translation.height
-        if let t = downAt, Date().timeIntervalSince(t) < Self.swipeWindow,
-           abs(dx) > Self.swipeDistance, abs(dx) > abs(dy) * 2 {
+        if let t = downAt, Date().timeIntervalSince(t) < VoiceLayout.swipeWindow,
+           abs(dx) > VoiceLayout.swipeDistance, abs(dx) > abs(dy) * 2 {
             swipe = dx < 0 ? -1 : 1
             talk.armCancel(false)
             return
@@ -226,11 +247,21 @@ struct VoiceModeView: View {
         talk.armCancel(v.location.y < bigTop)
     }
 
-    private func ended() {
+    private func ended(_ v: DragGesture.Value, size: CGSize) {
         let dir = swipe
+        let held = downAt.map { Date().timeIntervalSince($0) } ?? 0
         downAt = nil
         swipe = 0
         guard dir != 0 else {
+            // 轻点了底边左右两角的「清空 / 发送」字样：这一下不算说话，在中间提示要用滑的
+            let moved = hypot(v.translation.width, v.translation.height)
+            let corner = v.location.y > size.height - 80
+                && (v.location.x < 140 || v.location.x > size.width - 140)
+            if held < 0.6 && moved < 20 && corner {
+                talk.finish(store, silent: true)
+                showTapHint(v.location.x < size.width / 2 ? -1 : 1)
+                return
+            }
             talk.finish(store)
             return
         }
@@ -249,6 +280,17 @@ struct VoiceModeView: View {
         }
     }
 
+    private func showTapHint(_ dir: Int) {
+        Haptics.tap()
+        let id = UUID()
+        tapHintID = id
+        withAnimation(.easeOut(duration: 0.15)) { tapHint = dir }
+        Task {
+            try? await Task.sleep(for: .seconds(2.2))
+            if tapHintID == id { withAnimation(.easeOut(duration: 0.2)) { tapHint = 0 } }
+        }
+    }
+
     // MARK: - 读回电脑输入框
 
     private var refreshKey: String {
@@ -264,6 +306,20 @@ struct VoiceModeView: View {
             do { macText = try await BridgeClient.shared.inputText() } catch {}
             try? await Task.sleep(for: .seconds(2))
         }
+    }
+}
+
+/// 极致语音模式的尺寸：大按钮占内容区的 2/3。「所有按键」面板要按它算出浮在哪
+enum VoiceLayout {
+    static let topPad: CGFloat = 12
+    static let bottomPad: CGFloat = 8
+    /// 按下后多久内的横向快速移动算滑动手势；超过这个时间就只当在说话
+    static let swipeWindow: TimeInterval = 0.35
+    static let swipeDistance: CGFloat = 50
+    static func bigHeight(_ content: CGFloat) -> CGFloat { (content * 2 / 3).rounded() }
+    /// 面板底边离屏幕（安全区）底部的距离：让开大按钮和它上面那排 44pt 的键，再空 8pt
+    static func panelBottom(_ screen: CGFloat) -> CGFloat {
+        bottomPad + bigHeight(screen - topPad - bottomPad) + 12 + 44 + 8
     }
 }
 
