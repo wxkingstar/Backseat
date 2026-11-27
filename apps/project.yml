@@ -19,8 +19,8 @@ targets:
       base:
         # 手表 App 是手机 App 的配套 App：Bundle ID 必须以手机 App 的为前缀，两边才能互传配对信息
         PRODUCT_BUNDLE_IDENTIFIER: $(BACKSEAT_BUNDLE_ID).watchkitapp
-        MARKETING_VERSION: "1.0.5"
-        CURRENT_PROJECT_VERSION: "6"
+        MARKETING_VERSION: "1.0.6"
+        CURRENT_PROJECT_VERSION: "7"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     entitlements:
       path: Watch/Watch.entitlements
@@ -56,8 +56,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BACKSEAT_BUNDLE_ID)
-        MARKETING_VERSION: "1.0.5"
-        CURRENT_PROJECT_VERSION: "6"
+        MARKETING_VERSION: "1.0.6"
+        CURRENT_PROJECT_VERSION: "7"
         TARGETED_DEVICE_FAMILY: "1"
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
     info:
@@ -89,8 +89,8 @@ targets:
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: $(BACKSEAT_BUNDLE_ID).widgets
-        MARKETING_VERSION: "1.0.5"
-        CURRENT_PROJECT_VERSION: "6"
+        MARKETING_VERSION: "1.0.6"
+        CURRENT_PROJECT_VERSION: "7"
         TARGETED_DEVICE_FAMILY: "1"
     info:
       path: Widgets/Info.plist

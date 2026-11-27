@@ -10,8 +10,8 @@ struct MainView: View {
     @State private var showSettings = ProcessInfo.processInfo.arguments.contains("-showSettings")
     @State private var showPad = false
     @State private var showInbox = false
-    /// 极致语音模式：整个主屏换成一个大按钮，记住上次用的模式。启动参数 -voiceMode YES 可直接进入
-    @AppStorage("voiceMode") private var voiceMode = false
+    /// 极致语音模式：主屏换成一个大按钮。默认就是这个模式，切换后记住上次用的模式。启动参数 -voiceMode NO 可直接看普通模式
+    @AppStorage("voiceMode") private var voiceMode = true
 
 
     var body: some View {
@@ -23,13 +23,16 @@ struct MainView: View {
                 let hasSide = side > 60
                 ZStack(alignment: .bottomTrailing) {
                     if voiceMode {
-                        VoiceModeView(talk: talk) { voiceMode = false }
+                        VoiceModeView(talk: talk, exit: { voiceMode = false }) {
+                            // iPhone Duo 的常用键在右侧栏，这里不再放
+                            if !hasSide { keyRow(compact: false) }
+                        }
                             .overlay(alignment: .top) { toast.padding(.top, 56) }
                             .animation(.spring(response: 0.3, dampingFraction: 0.85), value: store.toast)
                     } else {
                         mainLayer(hasSide: hasSide)
                     }
-                    if hasSide && !talk.isLive && !voiceMode {
+                    if hasSide && !talk.isLive {
                         // 收在右侧状态栏的右下角，和底部说话条底边对齐，拇指够得着
                         SideKeys(talk: talk, expanded: $showAllKeys)
                             // 胶囊底边离屏幕底 24pt，和系统、其他 App 在这一栏的位置一致（要减掉底部安全区）
@@ -37,13 +40,13 @@ struct MainView: View {
                             // 和上面的系统状态图标同一条中线（距屏幕右缘约 48pt）
                             .offset(x: side - 48 + SideKeys.cell / 2)
                     }
-                    if showAllKeys && !talk.isLive && !voiceMode {
+                    if showAllKeys && !talk.isLive {
                         // 点面板以外的地方收起
                         Color.clear.contentShape(Rectangle()).onTapGesture { showAllKeys = false }
                         AllKeysPanel(kinds: hiddenKeys(hasSide: hasSide))
                             .padding(.trailing, 12)
-                            // 浮在说话条上方（普通 iPhone 还要让开那一排常用键）
-                            .padding(.bottom, hasSide ? 84 : 140)
+                            // 浮在说话条上方（普通 iPhone 还要让开那一排常用键）；极致语音模式下浮在大按钮上方那排键的上面
+                            .padding(.bottom, hasSide ? 84 : voiceMode ? VoiceLayout.panelBottom(geo.size.height) : 140)
                             .transition(.scale(scale: 0.9, anchor: .bottomTrailing).combined(with: .opacity))
                     }
                 }
